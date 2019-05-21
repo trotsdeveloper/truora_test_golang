@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"context"
 	"database/sql"
 	"fmt"
 	"strconv"
+	"time"
 	_ "github.com/lib/pq"
 	"github.com/cockroachdb/cockroach-go/crdb"
 )
@@ -47,11 +49,11 @@ func addQuotes(word string) string {
 
 // Server ...
 type Server struct {
-	id       int    // SERIAL PRIMARY KEY
-	address  string // VARCHAR[16]
-	sslGrade string // VARCHAR[5]
-	country  string // VARCHAR[20]
-	owner    string // VARCHAR[50]
+	id       int    `json:"-"`// SERIAL PRIMARY KEY
+	address  string `json:"address"`// VARCHAR[16]
+	sslGrade string `json:"ssl_grade"`// VARCHAR[5]
+	country  string `json:"country"` // VARCHAR[20]
+	owner    string `json:"owner"`// VARCHAR[50]
 }
 
 // ServerTest ...
@@ -65,7 +67,19 @@ type ServerTest struct {
 	isDown         bool		// boolean
 }
 
-// DAOe ...
+// ServerTestComplete ...
+type ServerTestComplete struct {
+	testInProgress bool `json:"-"`
+	servers []Server	`json:"servers"`
+	serversChanged bool `json:"servers_changed"`
+	sslGrade string `json:"ssl_grade"`
+	previousSslGrade string `json:"previous_ssl_grade"`
+	logo string `json:"logo"`
+	title string `json:"title"`
+	isDown bool	 `json:"is_down"`
+}
+
+// DAO..
 type DAO interface {
 	existsInDb(dbc interface{}) (bool, error)
 	selectInDB(dbc interface{}) error
@@ -227,10 +241,16 @@ func (st *ServerTest) createInDB(dbc interface{}) error {
 
 func (st *ServerTest) updateInDB(dbc interface{}) error {
 	sqlStatement := `UPDATE serverTest SET domain = $2, testHour = $3, testInProgress = $4,
-	sslGrade = $5, isDown = $6 WHERE id = $1`
+	sslGrade = $5, isDown = $6 WHERE id = $1;`
 	_, err := Exec(dbc, sqlStatement, strconv.Itoa(st.id), addQuotes(st.domain),
-		addQuotes(st.testHour), strconv.FormatBool(st.testInProgress),
-		addQuotes(st.sslGrade), strconv.FormatBool(st.isDown))
+		addQuotes(st.testHour), addQuotes(strconv.FormatBool(st.testInProgress)),
+		addQuotes(st.sslGrade), addQuotes(strconv.FormatBool(st.isDown)))
+	return err
+}
+
+func (st *ServerTest) updateHourInDb(dbc interface{}) error {
+	sqlStatement := `UPDATE serverTest SET testHour = $2 WHERE id = $1;`
+	_, err := Exec(dbc, sqlStatement, strconv.Itoa(st.id), addQuotes(st.testHour))
 	return err
 }
 
@@ -290,8 +310,130 @@ func ServerTestListFactory(dbc interface{}) ([]ServerTest, error) {
 	return serverTests, err
 }
 
-func (st *ServerTest) listServers(tx *sql.Tx) ([]Server, error) {
-	return ServerListFactory(st.id, tx)
+func (st *ServerTest) listServers(dbc interface{}) ([]Server, error) {
+	return ServerListFactory(st.id, dbc)
+}
+
+
+// ENDPOINT domain_name -> test_complete
+
+// 1) Search domain in database
+// 2) Is there a server test in process (in database) with the same given domain?
+// 2.1) YES: Is difference lower than 20 seconds?
+// 2.1.1) YES: In the database, the server test will remain unchanged
+//						Show the results using the ServerCompleteTest structure
+// 2.1.2) NO: Connect to the SSLabs App, is the server test in process in SSLabs?
+// 2.1.2.1) YES: Update the server test time in the database,
+//						Show the results using the ServerCompleteTest structure
+// 2.1.2.2) NO: Save the server test in the database
+//						Show the results using the ServerCompleteTest structure
+// 2.2) NO: Save the server test in the database
+// 						Show the results using the ServerCompleteTest structure
+
+// ENDPOINT -> domain_names
+
+func(st *ServerTest) searchPendingTest(domainName string, testInProgress bool,
+	dbc interface{}) error {
+	sqlStatement := `SELECT id, domain, testHour, testInProgress, sslGrade, isDown
+	FROM serverTest WHERE domain=$1 AND testInProgress=$2;`
+	rows, err := Query(dbc, sqlStatement, domainName, testInProgress)
+	if err != nil {
+		return err
+	}
+
+	var serverTests []ServerTest
+	for rows.Next() {
+		var stTmp ServerTest
+		if err = rows.Scan(&stTmp.id, &stTmp.domain, &stTmp.testHour, &stTmp.testInProgress,
+			&stTmp.sslGrade, &stTmp.isDown); err != nil {
+			return err
+		}
+		serverTests = append(serverTests, stTmp)
+	}
+
+	if err = rows.Err(); err != nil {
+		return err
+	}
+
+	if len(serverTests) > 0 {
+			higher := Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+			higherId := 0
+			for _, v := range serverTests {
+				d := Parse("2006-01-02 15:04:05", v.testHour)
+				if d.After(higher) {
+					higher = d
+					higherId = v.id
+				}
+			}
+			v.id = higherId
+			st.selectInDB(dbc)
+	}
+
+	return err
+}
+
+/*
+type ServerTestComplete struct {
+	testInProgress bool `json:"-"`
+	servers []Server	`json:"servers"`
+	serversChanged bool `json:"servers_changed"`
+	sslGrade string `json:"ssl_grade"`
+	previousSslGrade string `json:"previous_ssl_grade"`
+	logo string `json:"logo"`
+	title string `json:"title"`
+	isDown bool	 `json:"is_down"`
+}
+ */
+func MakeTestInDomain(domainName string,tx *sql.Tx) (ServerTestComplete, error) {
+	//  testHour string, testInProgress bool,servers []Server, sslGrade string, isDown bool,
+	returnTest := ServerTestComplete{}
+
+	pendingTest := ServerTest{}
+	serverCompleteTest := ServerCompleteTest
+
+	// 1) Is there a server test in process with the same given domain?
+	pendingTest.searchPendingTest(domainName, true, tx)
+	if(pendingTest.id != 0) {
+		pendingTestHour := Parse("2006-10-10 15:04:05", pendingTest.testHour)
+		currentTestHour := Parse("2006-10-10 15:04:05", testHour)
+		pendingTestHourA20 := pendingTestHour.Add(time.Second * 20)
+		// 1.1) Is difference lower than 20 seconds?
+		if(pendingTestHourA10.After(currentTestHour)) {
+			// 1.1.1) In the database, data will remain unchanged
+			// return the partial test.
+			returnTest.testInProgress = testInProgress
+			returnTest.servers = servers
+			returnTest.sslGrade = servers
+			returnTest.isDown = isDown
+			return ServerTestComplete
+		} else {
+			// 1.1.2) N
+
+		}
+
+	}
+	// 2.1.2) NO: Connect to the SSLabs App, is the server test in process in SSLabs?
+	// 2.1.2.1) YES: Update the server test time in the database,
+	//						Show the results using the ServerCompleteTest structure
+	// 2.1.2.2) NO: Save the server test in the database
+	//						Show the results using the ServerCompleteTest structure
+	// 2.2) NO: Is there a past server test, ready, with the same domain?
+	// 2.2.1) YES: Is difference lower than 20 seconds?
+	// 2.2.1.1) YES: In the database, the data will remain unchanged, show the results
+	// 2.2.1.2) NO:  Connect to the SSLabs App, is the server test in process in SSLabs?
+	// 2.2.1.2.1) YES: Update the server test time in the database,
+	//						Show the results using the ServerCompleteTest structure
+	// 2.2.1.2.2) NO: Save the server test in the database
+	//						Show the results using the ServerCompleteTest structure
+
+
+
+
+
+
+
+
+
 }
 
 func main() {
