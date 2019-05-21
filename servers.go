@@ -1,14 +1,14 @@
 package main
 
 import (
-	"encoding/json"
 	"context"
 	"database/sql"
 	"fmt"
 	"strconv"
 	"time"
-	_ "github.com/lib/pq"
+
 	"github.com/cockroachdb/cockroach-go/crdb"
+	_ "github.com/lib/pq"
 )
 
 // Constants
@@ -49,11 +49,11 @@ func addQuotes(word string) string {
 
 // Server ...
 type Server struct {
-	id       int    `json:"-"`// SERIAL PRIMARY KEY
-	address  string `json:"address"`// VARCHAR[16]
-	sslGrade string `json:"ssl_grade"`// VARCHAR[5]
-	country  string `json:"country"` // VARCHAR[20]
-	owner    string `json:"owner"`// VARCHAR[50]
+	id       int    `json:"-"`         // SERIAL PRIMARY KEY
+	address  string `json:"address"`   // VARCHAR[16]
+	sslGrade string `json:"ssl_grade"` // VARCHAR[5]
+	country  string `json:"country"`   // VARCHAR[20]
+	owner    string `json:"owner"`     // VARCHAR[50]
 }
 
 // ServerTest ...
@@ -61,22 +61,22 @@ type ServerTest struct {
 	id             int    // SERIAL PRIMARY KEY
 	domain         string // VARCHAR[100]
 	testHour       string // VARCHAR[30]
-	testInProgress bool		// boolean
+	testInProgress bool   // boolean
 	servers        []Server
-	sslGrade       string	// VARCHAR [5]
-	isDown         bool		// boolean
+	sslGrade       string // VARCHAR [5]
+	isDown         bool   // boolean
 }
 
 // ServerTestComplete ...
 type ServerTestComplete struct {
-	testInProgress bool `json:"-"`
-	servers []Server	`json:"servers"`
-	serversChanged bool `json:"servers_changed"`
-	sslGrade string `json:"ssl_grade"`
-	previousSslGrade string `json:"previous_ssl_grade"`
-	logo string `json:"logo"`
-	title string `json:"title"`
-	isDown bool	 `json:"is_down"`
+	testInProgress   bool     `json:"-"`
+	servers          []Server `json:"servers"`
+	serversChanged   bool     `json:"servers_changed"`
+	sslGrade         string   `json:"ssl_grade"`
+	previousSslGrade string   `json:"previous_ssl_grade"`
+	logo             string   `json:"logo"`
+	title            string   `json:"title"`
+	isDown           bool     `json:"is_down"`
 }
 
 // DAO..
@@ -88,55 +88,55 @@ type DAO interface {
 	deleteInDB(dbc interface{}) error
 }
 
-func Exec(dbc interface{}, sqlString string, args ...interface{}) (r *sql.Result, err error) {
-		switch v := dbc.(type) {
-		case *sql.DB:
-			r, err = v.Exec(sqlString, args...)
-		case *sql.Tx:
-			r, err = v.Exec(sqlString, args...)
-		default:
-			err = &CustomError{"No valid DB Controller"}
-		}
-		return
+func Exec(dbc interface{}, sqlString string, args ...interface{}) (r sql.Result, err error) {
+	switch v := dbc.(type) {
+	case *sql.DB:
+		r, err = v.Exec(sqlString, args...)
+	case *sql.Tx:
+		r, err = v.Exec(sqlString, args...)
+	default:
+		err = &CustomError{"No valid DB Controller"}
+	}
+	return
 }
 
 func QueryRow(dbc interface{}, sqlString string, args ...interface{}) (r *sql.Row, err error) {
-		switch v := dbc.(type) {
-		case *sql.DB:
-			r, err = v.QueryRow(sqlString, args...)
-		case *sql.Tx:
-			r, err = v.QueryRow(sqlString, args...)
-		default:
-			err = &CustomError{"No valid DB Controller"}
-		}
-		return
+	switch v := dbc.(type) {
+	case *sql.DB:
+		r = v.QueryRow(sqlString, args...)
+	case *sql.Tx:
+		r = v.QueryRow(sqlString, args...)
+	default:
+		err = &CustomError{"No valid DB Controller"}
+	}
+	return
 }
 
 func Query(dbc interface{}, sqlString string, args ...interface{}) (r *sql.Rows, err error) {
-		switch v := dbc.(type) {
-		case *sql.DB:
+	switch v := dbc.(type) {
+	case *sql.DB:
 		r, err = v.Query(sqlString, args...)
-		case *sql.Tx:
+	case *sql.Tx:
 		r, err = v.Query(sqlString, args...)
-		default:
+	default:
 		err = &CustomError{"No valid DB Controller"}
-		}
-		return
+	}
+	return
 }
 
 func InitServerTestTable(dbc *sql.DB) error {
-		sqlStatement := `CREATE TABLE serverTest IF NOT EXISTS (id SERIAL PRIMARY KEY,
+	sqlStatement := `CREATE TABLE serverTest IF NOT EXISTS (id SERIAL PRIMARY KEY,
 					domain VARCHAR[100], testHour VARCHAR[30], testInProgress boolean,
 					sslGrade VARCHAR[5], isDown boolean);`
-		_, err := dbc.Exec(sqlStatement)
-		return err
+	_, err := dbc.Exec(sqlStatement)
+	return err
 }
 func InitServerTable(dbc *sql.DB) error {
-		sqlStatement := `CREATE TABLE server IF NOT EXISTS (id SERIAL PRIMARY KEY,
+	sqlStatement := `CREATE TABLE server IF NOT EXISTS (id SERIAL PRIMARY KEY,
 			serverTestId integer REFERENCES serverTest(id),	address VARCHAR[16],
 			sslGrade VARCHAR[5], country VARCHAR[20], owner VARCHAR[50]);`
-		_, err := dbc.Exec(sqlStatement)
-		return err
+	_, err := dbc.Exec(sqlStatement)
+	return err
 }
 
 func DropServerTable(dbc *sql.DB) error {
@@ -153,8 +153,8 @@ func DropServerTestTable(dbc *sql.DB) error {
 
 func (s *Server) existsInDB(dbc interface{}) (bool, error) {
 	sqlStatement := `SELECT id FROM server WHERE id =$1;`
-	row := QueryRow(dbc, sqlStatement, s.id)
-	err := row.Scan(&s.id)
+	row, err := QueryRow(dbc, sqlStatement, s.id)
+	err = row.Scan(&s.id)
 	switch err {
 	case sql.ErrNoRows:
 		return false, nil
@@ -167,8 +167,8 @@ func (s *Server) existsInDB(dbc interface{}) (bool, error) {
 
 func (s *Server) selectInDB(dbc interface{}) error {
 	sqlStatement := "SELECT address, sslGrade, country, owner FROM server WHERE id=$1;"
-	row := QueryRow(dbc, sqlStatement, s.id)
-	err := row.Scan(&s.address, &s.sslGrade, &s.country, &s.owner)
+	row, err := QueryRow(dbc, sqlStatement, s.id)
+	err = row.Scan(&s.address, &s.sslGrade, &s.country, &s.owner)
 	switch err {
 	case sql.ErrNoRows:
 		return &CustomError{"No rows were returned."}
@@ -182,17 +182,22 @@ func (s *Server) selectInDB(dbc interface{}) error {
 func (s *Server) createInDB(dbc interface{}) error {
 	sqlStatement := `INSERT INTO server (address, sslGrade, country, owner)
 	VALUES ($1, $2, $3, $4) RETURNING id;`
-	row := QueryRow(dbc, sqlStatement, s.address, s.sslGrade, s.country, s.owner)
-	err := row.Scan(&s.id)
+	row, err := QueryRow(dbc, sqlStatement, s.address, s.sslGrade, s.country, s.owner)
+	err = row.Scan(&s.id)
 	return err
 }
 
+func (s *Server) updateServerTestInDB(serverTestId int, dbc interface{}) error {
+	sqlStatement := `UPDATE server SET serverTestId = $2 WHERE id = $1;`
+	_, err := Exec(dbc, sqlStatement, s.id, serverTestId)
+	return err
+}
 
 func (s *Server) updateInDB(dbc interface{}) error {
 	sqlStatement := `UPDATE server SET address = $2, sslGrade = $3, country = $4,
 	owner = $5 WHERE id = $1;`
-	_, err := Exec(dbc, sqlStatement, addQuotes(strconv.Itoa(s.id)), addQuotes(s.address),
-			addQuotes(s.sslGrade), addQuotes(s.country), addQuotes(s.owner))
+	_, err := Exec(dbc, sqlStatement, s.id, s.address,
+		s.sslGrade, s.country, s.owner)
 	return err
 }
 
@@ -204,8 +209,8 @@ func (s *Server) deleteInDB(dbc interface{}) error {
 
 func (st *ServerTest) existsInDB(dbc interface{}) (bool, error) {
 	sqlStatement := `SELECT id FROM serverTest WHERE id =$1;`
-	row := QueryRow(dbc, sqlStatement, st.id)
-	err := row.Scan(&st.id)
+	row, err := QueryRow(dbc, sqlStatement, st.id)
+	err = row.Scan(&st.id)
 	switch err {
 	case sql.ErrNoRows:
 		return false, nil
@@ -219,8 +224,8 @@ func (st *ServerTest) existsInDB(dbc interface{}) (bool, error) {
 func (st *ServerTest) selectInDB(dbc interface{}) error {
 	sqlStatement := `SELECT domain, testHour, testInProgress, sslGrade, isDown FROM
 	serverTest WHERE id=$1;`
-	row := QueryRow(dbc, sqlStatement, st.id)
-	err := row.Scan(&st.domain, &st.testHour, &st.testInProgress, &st.sslGrade, &st.isDown)
+	row, err := QueryRow(dbc, sqlStatement, st.id)
+	err = row.Scan(&st.domain, &st.testHour, &st.testInProgress, &st.sslGrade, &st.isDown)
 	switch err {
 	case sql.ErrNoRows:
 		return &CustomError{"No rows were returned."}
@@ -234,29 +239,64 @@ func (st *ServerTest) selectInDB(dbc interface{}) error {
 func (st *ServerTest) createInDB(dbc interface{}) error {
 	sqlStatement := `INSERT INTO serverTest (domain, testHour, testInProgress, sslGrade, isDown)
 	VALUES ($1, $2, $3, $4, $5) RETURNING id;`
-	row := QueryRow(dbc, sqlStatement, st.domain, st.testHour, st.testInProgress, st.sslGrade, st.isDown)
-	err := row.Scan(&st.id)
+	row, err := QueryRow(dbc, sqlStatement, st.domain, st.testHour, st.testInProgress, st.sslGrade, st.isDown)
+	err = row.Scan(&st.id)
+	if err != nil {
+		return err
+	}
+	if len(st.servers) > 0 {
+		for _, v := range st.servers {
+			if err = v.createInDB(dbc); err != nil {
+				return err
+			}
+			if err = v.updateServerTestInDB(st.id, dbc); err != nil {
+				return err
+			}
+		}
+	}
 	return err
 }
 
 func (st *ServerTest) updateInDB(dbc interface{}) error {
 	sqlStatement := `UPDATE serverTest SET domain = $2, testHour = $3, testInProgress = $4,
 	sslGrade = $5, isDown = $6 WHERE id = $1;`
-	_, err := Exec(dbc, sqlStatement, strconv.Itoa(st.id), addQuotes(st.domain),
-		addQuotes(st.testHour), addQuotes(strconv.FormatBool(st.testInProgress)),
-		addQuotes(st.sslGrade), addQuotes(strconv.FormatBool(st.isDown)))
+	_, err := Exec(dbc, sqlStatement, st.id, st.domain,
+		st.testHour, st.testInProgress, st.sslGrade, st.isDown)
+	if err != nil {
+		return err
+	}
+	if len(st.servers) > 0 {
+		err = st.deleteAllServersInDB(dbc)
+		if err != nil {
+			return err
+		}
+		for _, v := range st.servers {
+			if err = v.createInDB(dbc); err != nil {
+				return err
+			}
+			if err = v.updateServerTestInDB(st.id, dbc); err != nil {
+				return err
+			}
+		}
+	}
 	return err
 }
 
 func (st *ServerTest) updateHourInDb(dbc interface{}) error {
 	sqlStatement := `UPDATE serverTest SET testHour = $2 WHERE id = $1;`
-	_, err := Exec(dbc, sqlStatement, strconv.Itoa(st.id), addQuotes(st.testHour))
+	_, err := Exec(dbc, sqlStatement, st.id, st.testHour)
+	return err
+}
+
+func (st *ServerTest) deleteAllServersInDB(dbc interface{}) error {
+	sqlStatement := `DELETE FROM server WHERE idServerTest = $1;`
+	_, err := Exec(dbc, sqlStatement, st.id)
 	return err
 }
 
 func (st *ServerTest) deleteInDB(dbc interface{}) error {
 	sqlStatement := `DELETE FROM serverTest WHERE id = $1;`
-	_, err := Exec(sqlStatement, st.id)
+	_, err := Exec(dbc, sqlStatement, st.id)
 	return err
 }
 
@@ -310,29 +350,11 @@ func ServerTestListFactory(dbc interface{}) ([]ServerTest, error) {
 	return serverTests, err
 }
 
-func (st *ServerTest) listServers(dbc interface{}) ([]Server, error) {
-	return ServerListFactory(st.id, dbc)
+func (st *ServerTest) listServers(dbc interface{}) {
+	st.servers, _ = ServerListFactory(st.id, dbc)
 }
 
-
-// ENDPOINT domain_name -> test_complete
-
-// 1) Search domain in database
-// 2) Is there a server test in process (in database) with the same given domain?
-// 2.1) YES: Is difference lower than 20 seconds?
-// 2.1.1) YES: In the database, the server test will remain unchanged
-//						Show the results using the ServerCompleteTest structure
-// 2.1.2) NO: Connect to the SSLabs App, is the server test in process in SSLabs?
-// 2.1.2.1) YES: Update the server test time in the database,
-//						Show the results using the ServerCompleteTest structure
-// 2.1.2.2) NO: Save the server test in the database
-//						Show the results using the ServerCompleteTest structure
-// 2.2) NO: Save the server test in the database
-// 						Show the results using the ServerCompleteTest structure
-
-// ENDPOINT -> domain_names
-
-func(st *ServerTest) searchPendingTest(domainName string, testInProgress bool,
+func (st *ServerTest) searchPendingTest(domainName string, testInProgress bool,
 	dbc interface{}) error {
 	sqlStatement := `SELECT id, domain, testHour, testInProgress, sslGrade, isDown
 	FROM serverTest WHERE domain=$1 AND testInProgress=$2;`
@@ -356,97 +378,135 @@ func(st *ServerTest) searchPendingTest(domainName string, testInProgress bool,
 	}
 
 	if len(serverTests) > 0 {
-			higher := Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-			higherId := 0
-			for _, v := range serverTests {
-				d := Parse("2006-01-02 15:04:05", v.testHour)
-				if d.After(higher) {
-					higher = d
-					higherId = v.id
-				}
+		higher := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+		higherId := 0
+		for _, v := range serverTests {
+			d, err := time.Parse("2006-01-02 15:04:05", v.testHour)
+			if d.After(higher) {
+				higher = d
+				higherId = v.id
 			}
-			v.id = higherId
-			st.selectInDB(dbc)
+		}
+		st.id = higherId
+		st.selectInDB(dbc)
 	}
 
 	return err
 }
 
-/*
-type ServerTestComplete struct {
-	testInProgress bool `json:"-"`
-	servers []Server	`json:"servers"`
-	serversChanged bool `json:"servers_changed"`
-	sslGrade string `json:"ssl_grade"`
-	previousSslGrade string `json:"previous_ssl_grade"`
-	logo string `json:"logo"`
-	title string `json:"title"`
-	isDown bool	 `json:"is_down"`
-}
- */
-func MakeTestInDomain(domainName string,tx *sql.Tx) (ServerTestComplete, error) {
-	//  testHour string, testInProgress bool,servers []Server, sslGrade string, isDown bool,
-	returnTest := ServerTestComplete{}
+func MakeTestInDomain(domainName string, currentHourS string, makeTest func(string) (ServerTest, error),
+	tx *sql.Tx) (st ServerTest, err error) {
 
+	// 1) In the database, is there a server test in process
+	// with the same given domain?
 	pendingTest := ServerTest{}
-	serverCompleteTest := ServerCompleteTest
-
-	// 1) Is there a server test in process with the same given domain?
-	pendingTest.searchPendingTest(domainName, true, tx)
-	if(pendingTest.id != 0) {
-		pendingTestHour := Parse("2006-10-10 15:04:05", pendingTest.testHour)
-		currentTestHour := Parse("2006-10-10 15:04:05", testHour)
+	err = pendingTest.searchPendingTest(domainName, true, tx)
+	if err != nil {
+		return
+	}
+	if pendingTest.id != 0 {
+		// 1.1) YES: Is difference between the current hour
+		// and the pending test lower than 20 seconds?
+		var pendingTestHour, currentHour time.Time
+		pendingTestHour, err = time.Parse("2006-10-10 15:04:05", pendingTest.testHour)
+		currentHour, err = time.Parse("2006-10-10 15:04:05", currentHourS)
+		if err != nil {
+			return
+		}
 		pendingTestHourA20 := pendingTestHour.Add(time.Second * 20)
-		// 1.1) Is difference lower than 20 seconds?
-		if(pendingTestHourA10.After(currentTestHour)) {
-			// 1.1.1) In the database, data will remain unchanged
-			// return the partial test.
-			returnTest.testInProgress = testInProgress
-			returnTest.servers = servers
-			returnTest.sslGrade = servers
-			returnTest.isDown = isDown
-			return ServerTestComplete
+		if pendingTestHourA20.After(currentHour) {
+			// 1.1.1) YES: In the database, data will remain unchanged
+			// return the pending test
+			return pendingTest, err
 		} else {
-			// 1.1.2) N
+			// 1.1.2) Update the hour of the pending test with the current hour
+			pendingTest.testHour = currentHourS
+			err = pendingTest.updateHourInDb(tx)
+			if err != nil {
+				return
+			}
 
+			var currentTest ServerTest
+			currentTest, err = makeTest(domainName)
+			if err != nil {
+				return
+			}
+			// 1.1.2) NO: In SSLabs, Is the server test in process?
+			if currentTest.testInProgress {
+				// 1.1.2.1) YES: Return the pending test with the new hour
+				return pendingTest, err
+			} else {
+				// 1.1.2.2) NO: Update the pending test in the database, with
+				// the information of the current test
+				currentTest.id = pendingTest.id
+				err = currentTest.updateInDB(tx)
+				return currentTest, err
+			}
+		}
+
+	} else {
+		// 1.2) NO: Is there a past server test, ready, with the same given domain?
+		pastTest := ServerTest{}
+		err = pastTest.searchPendingTest(domainName, false, tx)
+		if pastTest.id != 0 {
+			// 1.2.1) YES: Is difference lower than 20 seconds?
+			var pastTestHour, currentHour time.Time
+			pastTestHour, err = time.Parse("2006-10-10 15:04:05", pastTest.testHour)
+			currentHour, err = time.Parse("2006-10-10 15:04:05", currentHourS)
+			if err != nil {
+				return
+			}
+			pastTestHourA20 := pastTestHour.Add(time.Second * 20)
+			if pastTestHourA20.After(currentHour) {
+				// 1.2.1.1) YES: In the database, data will remain unchanged,
+				// return the past test
+				return pastTest, err
+			} else {
+				// 1.2.1.2) NO: Make a server test from SSLabs, save it in DB.
+				var currentTest ServerTest
+				currentTest, err = makeTest(domainName)
+				if err != nil {
+					return
+				}
+				err = currentTest.createInDB(tx)
+				return currentTest, err
+			}
+		} else {
+			// 1.2.2) NO: Make a server test from SSLabs, save it in DB.
+			var currentTest ServerTest
+			currentTest, err = makeTest(domainName)
+			if err != nil {
+				return
+			}
+			err = currentTest.createInDB(tx)
+			return currentTest, err
 		}
 
 	}
-	// 2.1.2) NO: Connect to the SSLabs App, is the server test in process in SSLabs?
-	// 2.1.2.1) YES: Update the server test time in the database,
-	//						Show the results using the ServerCompleteTest structure
-	// 2.1.2.2) NO: Save the server test in the database
-	//						Show the results using the ServerCompleteTest structure
-	// 2.2) NO: Is there a past server test, ready, with the same domain?
-	// 2.2.1) YES: Is difference lower than 20 seconds?
-	// 2.2.1.1) YES: In the database, the data will remain unchanged, show the results
-	// 2.2.1.2) NO:  Connect to the SSLabs App, is the server test in process in SSLabs?
-	// 2.2.1.2.1) YES: Update the server test time in the database,
-	//						Show the results using the ServerCompleteTest structure
-	// 2.2.1.2.2) NO: Save the server test in the database
-	//						Show the results using the ServerCompleteTest structure
-
-
-
-
-
-
-
-
-
+	return
 }
 
 func main() {
 	// Connect to the "servers" database.
 	db, err := initDB()
+	InitServerTestTable(db)
+	InitServerTable(db)
+
+	DropServerTable(db)
+	DropServerTestTable(db)
+
+	makeSSLabs := func(domain string) (ServerTest, error) {
+		return ServerTest{}, nil
+	}
+
 	err = crdb.ExecuteTx(context.Background(), db, nil, func(tx *sql.Tx) error {
-			return ()
+		return MakeTestInDomain(domainName, currentHourS, func(arg1 string) (ServerTest, error), *sql.T)
 	})
 
 	if err == nil {
 		fmt.Println("Success")
-	}	else {
-		return err
+	} else {
+		fmt.Println(err)
 	}
 	defer db.Close()
 
