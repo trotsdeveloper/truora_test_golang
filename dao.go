@@ -59,25 +59,54 @@ type Server struct {
 
 // ServerEvaluation ...
 type ServerEvaluation struct {
-	Id             int    // SERIAL PRIMARY KEY
-	Domain         string // VARCHAR[100]
-	TestHour       string // VARCHAR[30]
-	TestInProgress bool   // boolean
-	Servers        []Server
-	SslGrade       string // VARCHAR [5]
-	IsDown         bool   // boolean
+	Id                   int    // SERIAL PRIMARY KEY
+	Domain               string // VARCHAR[100]
+	EvaluationHour       string // VARCHAR[30]
+	EvaluationInProgress bool   // boolean
+	Servers              []Server
+	SslGrade             string // VARCHAR [5]
+	IsDown               bool   // boolean
+}
+
+func (se *ServerEvaluation) Copy(sec ServerEvaluation) {
+	se.Id = sec.Id
+	se.Domain = sec.Domain
+	se.EvaluationHour = sec.EvaluationHour
+	se.EvaluationInProgress = sec.EvaluationInProgress
+	se.Servers = sec.Servers
+	se.SslGrade = sec.SslGrade
+	se.IsDown = sec.IsDown
+}
+
+func CompareServer(s1, s2 Server) bool {
+	return s1.Address == s2.Address && s1.SslGrade == s2.SslGrade &&
+		s1.Country == s2.Country && s1.Owner == s2.Owner
+}
+
+func CompareServerList(sl1 []Server, sl2 []Server) bool {
+	if len(sl1) == len(sl2) {
+		if len(sl1) > 0 {
+			for i := 0; i < len(sl1); i++ {
+				if !CompareServer(sl1[i], sl2[i]) {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	return false
 }
 
 func CompareServerEvaluation(se1, se2 ServerEvaluation) bool {
-	return se1.Domain == se2.Domain && se1.TestHour == se2.TestHour &&
-		se1.TestInProgress == se2.TestInProgress && se1.SslGrade == se2.SslGrade &&
-		se1.IsDown == se2.IsDown
+	return se1.Domain == se2.Domain && se1.EvaluationHour == se2.EvaluationHour &&
+		se1.EvaluationInProgress == se2.EvaluationInProgress && se1.SslGrade == se2.SslGrade &&
+		se1.IsDown == se2.IsDown && CompareServerList(se1.Servers, se2.Servers)
 }
 
 // ServerEvaluationComplete ...
 /*
 type ServerEvaluationComplete struct {
-	testInProgress   bool     `json:"-"`
+	EvaluationInProgress   bool     `json:"-"`
 	servers          []Server `json:"servers"`
 	serversChanged   bool     `json:"servers_changed"`
 	sslGrade         string   `json:"ssl_grade"`
@@ -135,7 +164,7 @@ func Query(dbc interface{}, sqlString string, args ...interface{}) (r *sql.Rows,
 
 func InitServerEvaluationTable(dbc *sql.DB) error {
 	sqlStatement := `CREATE TABLE serverEvaluation (id SERIAL PRIMARY KEY,
-					domain VARCHAR(100), testHour VARCHAR(30), testInProgress boolean,
+					domain VARCHAR(100), EvaluationHour VARCHAR(30), EvaluationInProgress boolean,
 					sslGrade VARCHAR(5), isDown boolean);`
 	_, err := dbc.Exec(sqlStatement)
 	return err
@@ -157,6 +186,17 @@ func DropServerTable(dbc *sql.DB) error {
 func DropServerEvaluationTable(dbc *sql.DB) error {
 	sqlStatement := `DROP TABLE serverEvaluation;`
 	_, err := dbc.Exec(sqlStatement)
+	return err
+}
+
+func CleanDataInDB(dbc *sql.DB) error {
+	sqlStatement1 := `DELETE FROM serverevaluation WHERE id > 0;`
+	_, err := dbc.Exec(sqlStatement1)
+	if err != nil {
+		return err
+	}
+	sqlStatement2 := `DELETE FROM server WHERE id > 0;`
+	_, err = dbc.Exec(sqlStatement2)
 	return err
 }
 
@@ -232,10 +272,10 @@ func (se *ServerEvaluation) existsInDB(dbc interface{}) (bool, error) {
 }
 
 func (se *ServerEvaluation) selectInDB(dbc interface{}) error {
-	sqlStatement := `SELECT domain, testHour, testInProgress, sslGrade, isDown FROM
+	sqlStatement := `SELECT domain, EvaluationHour, EvaluationInProgress, sslGrade, isDown FROM
 	serverEvaluation WHERE id=$1;`
 	row, err := QueryRow(dbc, sqlStatement, se.Id)
-	err = row.Scan(&se.Domain, &se.TestHour, &se.TestInProgress, &se.SslGrade, &se.IsDown)
+	err = row.Scan(&se.Domain, &se.EvaluationHour, &se.EvaluationInProgress, &se.SslGrade, &se.IsDown)
 	switch err {
 	case sql.ErrNoRows:
 		return &CustomError{"No rows were returned."}
@@ -247,9 +287,9 @@ func (se *ServerEvaluation) selectInDB(dbc interface{}) error {
 }
 
 func (se *ServerEvaluation) createInDB(dbc interface{}) error {
-	sqlStatement := `INSERT INTO serverEvaluation (domain, testHour, testInProgress, sslGrade, isDown)
+	sqlStatement := `INSERT INTO serverEvaluation (domain, EvaluationHour, EvaluationInProgress, sslGrade, isDown)
 	VALUES ($1, $2, $3, $4, $5) RETURNING id;`
-	row, err := QueryRow(dbc, sqlStatement, se.Domain, se.TestHour, se.TestInProgress, se.SslGrade, se.IsDown)
+	row, err := QueryRow(dbc, sqlStatement, se.Domain, se.EvaluationHour, se.EvaluationInProgress, se.SslGrade, se.IsDown)
 	err = row.Scan(&se.Id)
 	if err != nil {
 		return err
@@ -268,10 +308,10 @@ func (se *ServerEvaluation) createInDB(dbc interface{}) error {
 }
 
 func (se *ServerEvaluation) updateInDB(dbc interface{}) error {
-	sqlStatement := `UPDATE serverEvaluation SET domain = $2, testHour = $3, testInProgress = $4,
+	sqlStatement := `UPDATE serverEvaluation SET domain = $2, EvaluationHour = $3, EvaluationInProgress = $4,
 	sslGrade = $5, isDown = $6 WHERE id = $1;`
 	_, err := Exec(dbc, sqlStatement, se.Id, se.Domain,
-		se.TestHour, se.TestInProgress, se.SslGrade, se.IsDown)
+		se.EvaluationHour, se.EvaluationInProgress, se.SslGrade, se.IsDown)
 	if err != nil {
 		return err
 	}
@@ -293,8 +333,8 @@ func (se *ServerEvaluation) updateInDB(dbc interface{}) error {
 }
 
 func (se *ServerEvaluation) updateHourInDb(dbc interface{}) error {
-	sqlStatement := `UPDATE serverEvaluation SET testHour = $2 WHERE id = $1;`
-	_, err := Exec(dbc, sqlStatement, se.Id, se.TestHour)
+	sqlStatement := `UPDATE serverEvaluation SET EvaluationHour = $2 WHERE id = $1;`
+	_, err := Exec(dbc, sqlStatement, se.Id, se.EvaluationHour)
 	return err
 }
 
@@ -337,7 +377,7 @@ func ServerListFactory(idServerEvaluation int, dbc interface{}) ([]Server, error
 
 func ServerEvaluationListFactory(dbc interface{}) ([]ServerEvaluation, error) {
 	var serverEvaluations []ServerEvaluation
-	sqlStatement := `SELECT id, domain, testHour, testInProgress, sslGrade, isDown FROM serverEvaluation;`
+	sqlStatement := `SELECT id, domain, EvaluationHour, EvaluationInProgress, sslGrade, isDown FROM serverEvaluation;`
 	rows, err := Query(dbc, sqlStatement)
 
 	if err != nil {
@@ -346,7 +386,7 @@ func ServerEvaluationListFactory(dbc interface{}) ([]ServerEvaluation, error) {
 
 	for rows.Next() {
 		var se ServerEvaluation
-		if err = rows.Scan(&se.Id, &se.Domain, &se.TestHour, &se.TestInProgress,
+		if err = rows.Scan(&se.Id, &se.Domain, &se.EvaluationHour, &se.EvaluationInProgress,
 			&se.SslGrade, &se.IsDown); err != nil {
 			return serverEvaluations, err
 		}
@@ -364,130 +404,177 @@ func (se *ServerEvaluation) listServers(dbc interface{}) {
 	se.Servers, _ = ServerListFactory(se.Id, dbc)
 }
 
-func (se *ServerEvaluation) searchPendingTest(domainName string, testInProgress bool,
-	dbc interface{}) error {
-	sqlStatement := `SELECT id, domain, testHour, testInProgress, sslGrade, isDown
-	FROM serverEvaluation WHERE domain = $1 AND testInProgress = $2;`
-	rows, err := Query(dbc, sqlStatement, domainName, testInProgress)
-	if err != nil {
-		return err
+func SearchLastEvaluations(domainName string, EvaluationInProgress bool,
+	lastNItems int, dbc interface{}) (lastServerEvaluations []ServerEvaluation, err error) {
+
+	if lastNItems <= 0 {
+		err = &CustomError{`lastNItems needs to be a positive integer`}
+		return
 	}
 
 	var serverEvaluations []ServerEvaluation
+	sqlStatement := `SELECT id, domain, EvaluationHour, EvaluationInProgress, sslGrade, isDown
+		FROM serverEvaluation WHERE domain = $1 AND EvaluationInProgress = $2;`
+	var rows *sql.Rows
+	rows, err = Query(dbc, sqlStatement, domainName, EvaluationInProgress)
+
+	if err != nil {
+		return
+	}
+
 	for rows.Next() {
 		var seTmp ServerEvaluation
-		if err = rows.Scan(&seTmp.Id, &seTmp.Domain, &seTmp.TestHour, &seTmp.TestInProgress,
+		if err = rows.Scan(&seTmp.Id, &seTmp.Domain, &seTmp.EvaluationHour, &seTmp.EvaluationInProgress,
 			&seTmp.SslGrade, &seTmp.IsDown); err != nil {
-			return err
+			return
 		}
 		serverEvaluations = append(serverEvaluations, seTmp)
 	}
 
 	if err = rows.Err(); err != nil {
-		return err
+		return
 	}
 
-	if len(serverEvaluations) > 0 {
-		higher := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-		higherId := 0
+	if len(serverEvaluations) == 0 {
+		return
+	}
+
+	lowestBound := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	highest := lowestBound
+	highestID := 0
+
+	for _, v := range serverEvaluations {
+		var d time.Time
+		d, err = time.Parse(time.RFC3339, v.EvaluationHour)
+		if d.After(highest) {
+			highest = d
+			highestID = v.Id
+		}
+	}
+
+	se1 := ServerEvaluation{Id: highestID}
+	se1.selectInDB(dbc)
+	lastServerEvaluations = append(lastServerEvaluations, se1)
+
+	for i := 2; i <= lastNItems; i++ {
+		if len(serverEvaluations)-i < 0 {
+			return
+		}
+		higher := lowestBound
+		higherID := 0
+
 		for _, v := range serverEvaluations {
 			var d time.Time
-			d, err = time.Parse(time.RFC3339, v.TestHour)
-			if d.After(higher) {
+			d, err = time.Parse(time.RFC3339, v.EvaluationHour)
+			if d.After(higher) && d.Before(highest) {
 				higher = d
-				higherId = v.Id
+				higherID = v.Id
 			}
 		}
-		se.Id = higherId
-		se.selectInDB(dbc)
+
+		seTmp := ServerEvaluation{Id: higherID}
+		seTmp.selectInDB(dbc)
+		lastServerEvaluations = append(lastServerEvaluations, seTmp)
+		highest = higher
+	}
+	return
+}
+
+func (se *ServerEvaluation) SearchLastEvaluation(domainName string, EvaluationInProgress bool,
+	dbc interface{}) error {
+	lastEvaluations, err := SearchLastEvaluations(domainName, EvaluationInProgress, 1, dbc)
+	if err == nil {
+		if len(lastEvaluations) > 0 {
+			se.Copy(lastEvaluations[0])
+		}
 	}
 	return err
 }
 
-func MakeEvaluationInDomain(domainName string, currentHour time.Time, makeTest func(string) (ServerEvaluation, error),
+func MakeEvaluationInDomain(domainName string, currentHour time.Time, makeEvaluation func(string) (ServerEvaluation, error),
 	dbc interface{}) (st ServerEvaluation, err error) {
 
-	// 1) In the database, is there a server test in process
+	// 1) In the database, is there a server Evaluation in process
 	// with the same given domain?
-	pendingTest := ServerEvaluation{}
-	err = pendingTest.searchPendingTest(domainName, true, dbc)
+	pendingEvaluation := ServerEvaluation{}
+	err = pendingEvaluation.SearchLastEvaluation(domainName, true, dbc)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	if pendingTest.Id != 0 {
+	if pendingEvaluation.Id != 0 {
 		// 1.1) YES: Is difference between the current hour
-		// and the pending test lower than 20 seconds?
-		var pendingTestHour time.Time
-		pendingTestHour, err = time.Parse(time.RFC3339, pendingTest.TestHour)
+		// and the pending Evaluation lower than 20 seconds?
+		var pendingEvaluationHour time.Time
+		pendingEvaluationHour, err = time.Parse(time.RFC3339, pendingEvaluation.EvaluationHour)
 		if err != nil {
 			return
 		}
-		pendingTestHourA20 := pendingTestHour.Add(time.Second * 20)
-		if pendingTestHourA20.After(currentHour) {
+		pendingEvaluationHourA20 := pendingEvaluationHour.Add(time.Second * 20)
+		if pendingEvaluationHourA20.After(currentHour) {
 			// 1.1.1) YES: In the database, data will remain unchanged
-			// return the pending test
-			return pendingTest, err
+			// return the pending Evaluation
+			return pendingEvaluation, err
 		} else {
-			// 1.1.2) Update the hour of the pending test with the current hour
-			pendingTest.TestHour = currentHour.Format(time.RFC3339)
-			err = pendingTest.updateHourInDb(dbc)
+			// 1.1.2) Update the hour of the pending Evaluation with the current hour
+			pendingEvaluation.EvaluationHour = currentHour.Format(time.RFC3339)
+			err = pendingEvaluation.updateHourInDb(dbc)
 			if err != nil {
 				return
 			}
 
-			var currentTest ServerEvaluation
-			currentTest, err = makeTest(domainName)
+			var currentEvaluation ServerEvaluation
+			currentEvaluation, err = makeEvaluation(domainName)
 			if err != nil {
 				return
 			}
-			// 1.1.2) NO: In SSLabs, Is the server test in process?
-			if currentTest.TestInProgress {
-				// 1.1.2.1) YES: Return the pending test with the new hour
-				return pendingTest, err
+			// 1.1.2) NO: In SSLabs, Is the server Evaluation in process?
+			if currentEvaluation.EvaluationInProgress {
+				// 1.1.2.1) YES: Return the pending Evaluation with the new hour
+				return pendingEvaluation, err
 			} else {
-				// 1.1.2.2) NO: Update the pending test in the database, with
-				// the information of the current test
-				currentTest.Id = pendingTest.Id
-				err = currentTest.updateInDB(dbc)
-				return currentTest, err
+				// 1.1.2.2) NO: Update the pending Evaluation in the database, with
+				// the information of the current Evaluation
+				currentEvaluation.Id = pendingEvaluation.Id
+				err = currentEvaluation.updateInDB(dbc)
+				return currentEvaluation, err
 			}
 		}
 	} else {
-		// 1.2) NO: Is there a past server test, ready, with the same given domain?
-		pastTest := ServerEvaluation{}
-		err = pastTest.searchPendingTest(domainName, false, dbc)
-		if pastTest.Id != 0 {
+		// 1.2) NO: Is there a past server Evaluation, ready, with the same given domain?
+		pastEvaluation := ServerEvaluation{}
+		err = pastEvaluation.SearchLastEvaluation(domainName, false, dbc)
+		if pastEvaluation.Id != 0 {
 			// 1.2.1) YES: Is difference lower than 20 seconds?
-			var pastTestHour time.Time
-			pastTestHour, err = time.Parse(time.RFC3339, pastTest.TestHour)
+			var pastEvaluationHour time.Time
+			pastEvaluationHour, err = time.Parse(time.RFC3339, pastEvaluation.EvaluationHour)
 			if err != nil {
 				return
 			}
-			pastTestHourA20 := pastTestHour.Add(time.Second * 20)
-			if pastTestHourA20.After(currentHour) {
+			pastEvaluationHourA20 := pastEvaluationHour.Add(time.Second * 20)
+			if pastEvaluationHourA20.After(currentHour) {
 				// 1.2.1.1) YES: In the database, data will remain unchanged,
-				// return the past test
-				return pastTest, err
+				// return the past Evaluation
+				return pastEvaluation, err
 			} else {
-				// 1.2.1.2) NO: Make a server test from SSLabs, save it in DB.
-				var currentTest ServerEvaluation
-				currentTest, err = makeTest(domainName)
+				// 1.2.1.2) NO: Make a server Evaluation from SSLabs, save it in DB.
+				var currentEvaluation ServerEvaluation
+				currentEvaluation, err = makeEvaluation(domainName)
 				if err != nil {
 					return
 				}
-				err = currentTest.createInDB(dbc)
-				return currentTest, err
+				err = currentEvaluation.createInDB(dbc)
+				return currentEvaluation, err
 			}
 		} else {
-			// 1.2.2) NO: Make a server test from SSLabs, save it in DB.
-			var currentTest ServerEvaluation
-			currentTest, err = makeTest(domainName)
+			// 1.2.2) NO: Make a server Evaluation from SSLabs, save it in DB.
+			var currentEvaluation ServerEvaluation
+			currentEvaluation, err = makeEvaluation(domainName)
 			if err != nil {
 				return
 			}
-			err = currentTest.createInDB(dbc)
-			return currentTest, err
+			err = currentEvaluation.createInDB(dbc)
+			return currentEvaluation, err
 		}
 	}
 }
