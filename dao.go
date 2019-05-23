@@ -353,31 +353,6 @@ func (se *ServerEvaluation) deleteInDB(dbc interface{}) error {
 	return err
 }
 
-func ServerListFactory(idServerEvaluation int, dbc interface{}) ([]Server, error) {
-	var servers []Server
-	sqlStatement := `SELECT id, address, sslGrade, country, owner FROM server
-						WHERE serverEvaluationId = $1;`
-	rows, err := Query(dbc, sqlStatement, idServerEvaluation)
-
-	if err != nil {
-		return servers, err
-	}
-
-	for rows.Next() {
-		var s Server
-		if err = rows.Scan(&s.Id, &s.Address, &s.SslGrade, &s.Country, &s.Owner); err != nil {
-			return servers, err
-		}
-		servers = append(servers, s)
-	}
-
-	if err = rows.Err(); err != nil {
-		return servers, err
-	}
-
-	return servers, err
-}
-
 func ServerEvaluationListFactory(dbc interface{}) ([]ServerEvaluation, error) {
 	var serverEvaluations []ServerEvaluation
 	sqlStatement := `SELECT id, domain, EvaluationHour, EvaluationInProgress, sslGrade, isDown FROM serverEvaluation;`
@@ -403,8 +378,57 @@ func ServerEvaluationListFactory(dbc interface{}) ([]ServerEvaluation, error) {
 	return serverEvaluations, err
 }
 
+func ServerListFactory(dbc interface{}) ([]Server, error) {
+	var servers []Server
+	sqlStatement := `SELECT id, address, sslGrade, country, owner FROM server;`
+	rows, err := Query(dbc, sqlStatement)
+
+	if err != nil {
+		return servers, err
+	}
+
+	for rows.Next() {
+		var s Server
+		if err = rows.Scan(&s.Id, &s.Address, &s.SslGrade, &s.Country, &s.Owner); err != nil {
+			return servers, err
+		}
+		servers = append(servers, s)
+	}
+
+	if err = rows.Err(); err != nil {
+		return servers, err
+	}
+
+	return servers, err
+}
+
+func ServerListFactoryID(idServerEvaluation int, dbc interface{}) ([]Server, error) {
+	var servers []Server
+	sqlStatement := `SELECT id, address, sslGrade, country, owner FROM server
+						WHERE serverEvaluationId = $1;`
+	rows, err := Query(dbc, sqlStatement, idServerEvaluation)
+
+	if err != nil {
+		return servers, err
+	}
+
+	for rows.Next() {
+		var s Server
+		if err = rows.Scan(&s.Id, &s.Address, &s.SslGrade, &s.Country, &s.Owner); err != nil {
+			return servers, err
+		}
+		servers = append(servers, s)
+	}
+
+	if err = rows.Err(); err != nil {
+		return servers, err
+	}
+
+	return servers, err
+}
+
 func (se *ServerEvaluation) listServers(dbc interface{}) error {
-	servers, err := ServerListFactory(se.Id, dbc)
+	servers, err := ServerListFactoryID(se.Id, dbc)
 	se.Servers = servers
 	return err
 }
@@ -606,5 +630,3 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, makeEvalua
 		}
 	}
 }
-
-func main() {}
