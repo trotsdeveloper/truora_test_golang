@@ -8,20 +8,6 @@ import (
 	"github.com/go-chi/chi"
 )
 
-func evaluateServerEndPoint(w http.ResponseWriter, r *http.Request) {
-	mapJson := map[string]int{"TEST": 1}
-	mapB, _ := json.Marshal(mapJson)
-	mapS := string(mapB[:])
-	fmt.Println(mapS)
-	w.Header().Set("Content-Type", "application/json; charset=utf-8") // normal header
-	w.WriteHeader(http.StatusOK)
-	w.Write(mapB[:])
-}
-
-func viewPastEvaluationsEndPoint(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("LIST")
-}
-
 func main() {
 	r := chi.NewRouter()
 

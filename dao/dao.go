@@ -1,4 +1,4 @@
-package main
+package dao
 
 import (
 	"database/sql"
@@ -22,7 +22,7 @@ const (
 	SSLCERT     = "../certs/client.manuelams.crt"
 )
 
-func initDB() (*sql.DB, error) {
+func InitDB() (*sql.DB, error) {
 	/*db, err := sql.Open("postgres",
 	"postgresql://manuelams@localhost:26257/servers?ssl=true&sslmode=require&sslrootcert=../certs/ca.crt&sslkey=../certs/client.manuelams.key&sslcert=../certs/client.manuelams.crt")
 	*/
@@ -101,20 +101,6 @@ func CompareServerEvaluation(se1, se2 ServerEvaluation) bool {
 		se1.EvaluationInProgress == se2.EvaluationInProgress && se1.SslGrade == se2.SslGrade &&
 		se1.IsDown == se2.IsDown && CompareServerList(se1.Servers, se2.Servers)
 }
-
-// ServerEvaluationComplete ...
-/*
-type ServerEvaluationComplete struct {
-	EvaluationInProgress   bool     `json:"-"`
-	servers          []Server `json:"servers"`
-	serversChanged   bool     `json:"servers_changed"`
-	sslGrade         string   `json:"ssl_grade"`
-	previousSslGrade string   `json:"previous_ssl_grade"`
-	logo             string   `json:"logo"`
-	title            string   `json:"title"`
-	isDown           bool     `json:"is_down"`
-}
-*/
 
 // DAO..
 type DAO interface {
@@ -376,30 +362,6 @@ func ServerEvaluationListFactory(dbc interface{}) ([]ServerEvaluation, error) {
 	}
 
 	return serverEvaluations, err
-}
-
-func ServerListFactory(dbc interface{}) ([]Server, error) {
-	var servers []Server
-	sqlStatement := `SELECT id, address, sslGrade, country, owner FROM server;`
-	rows, err := Query(dbc, sqlStatement)
-
-	if err != nil {
-		return servers, err
-	}
-
-	for rows.Next() {
-		var s Server
-		if err = rows.Scan(&s.Id, &s.Address, &s.SslGrade, &s.Country, &s.Owner); err != nil {
-			return servers, err
-		}
-		servers = append(servers, s)
-	}
-
-	if err = rows.Err(); err != nil {
-		return servers, err
-	}
-
-	return servers, err
 }
 
 func ServerListFactoryID(idServerEvaluation int, dbc interface{}) ([]Server, error) {

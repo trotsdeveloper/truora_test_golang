@@ -1,4 +1,4 @@
-package main
+package dao
 
 import (
 	"database/sql"
@@ -12,8 +12,7 @@ import (
 func TestMakeEvaluationInDomain(t *testing.T) {
 
 	// DB TEST CONFIGURATION
-	db, err := initDB()
-
+	db, err := InitDB()
 	if err != nil {
 		t.Error(fmt.Sprintf("Exception: %v", err))
 	}
@@ -97,7 +96,7 @@ func testMakeEvaluationInDomainFunc(domainName string, currentHour time.Time, ma
 // HaveServersChanged, PreviousSSLgrade
 func TestDBFunctions(t *testing.T) {
 	// DB TEST CONFIGURATION
-	db, err := initDB()
+	db, err := InitDB()
 	if err != nil {
 		t.Error(fmt.Sprintf("Exception: %v", err))
 	}
