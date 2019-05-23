@@ -29,9 +29,6 @@ func initDB() (*sql.DB, error) {
 	psqlInfo := fmt.Sprintf("postgresql://%s@%s:%s/%s?ssl=%s&sslmode=%s&sslrootcert=%s&sslkey=%s&sslcert=%s",
 		USER, HOST, strconv.Itoa(PORT), DATABASE, strconv.FormatBool(SSL), SSLMODE, SSLROOTCERT, SSLKEY, SSLCERT)
 	db, err := sql.Open("postgres", psqlInfo)
-	if err != nil {
-		fmt.Println("AAA")
-	}
 	return db, err
 }
 
@@ -83,18 +80,20 @@ func CompareServer(s1, s2 Server) bool {
 		s1.Country == s2.Country && s1.Owner == s2.Owner
 }
 
-func CompareServerList(sl1 []Server, sl2 []Server) bool {
+func CompareServerList(sl1 []Server, sl2 []Server) (b bool) {
+	b = true
 	if len(sl1) == len(sl2) {
 		if len(sl1) > 0 {
 			for i := 0; i < len(sl1); i++ {
 				if !CompareServer(sl1[i], sl2[i]) {
-					return false
+					b = false
+					return
 				}
 			}
 		}
-		return true
+		return
 	}
-	return false
+	return
 }
 
 func CompareServerEvaluation(se1, se2 ServerEvaluation) bool {
@@ -190,12 +189,12 @@ func DropServerEvaluationTable(dbc *sql.DB) error {
 }
 
 func CleanDataInDB(dbc *sql.DB) error {
-	sqlStatement1 := `DELETE FROM serverevaluation WHERE id > 0;`
+	sqlStatement1 := `DELETE FROM server WHERE id > 0;`
 	_, err := dbc.Exec(sqlStatement1)
 	if err != nil {
 		return err
 	}
-	sqlStatement2 := `DELETE FROM server WHERE id > 0;`
+	sqlStatement2 := `DELETE FROM serverevaluation WHERE id > 0;`
 	_, err = dbc.Exec(sqlStatement2)
 	return err
 }
@@ -284,6 +283,7 @@ func (se *ServerEvaluation) selectInDB(dbc interface{}) error {
 	default:
 		return err
 	}
+
 }
 
 func (se *ServerEvaluation) createInDB(dbc interface{}) error {
@@ -347,6 +347,9 @@ func (se *ServerEvaluation) deleteAllServersInDB(dbc interface{}) error {
 func (se *ServerEvaluation) deleteInDB(dbc interface{}) error {
 	sqlStatement := `DELETE FROM serverEvaluation WHERE id = $1;`
 	_, err := Exec(dbc, sqlStatement, se.Id)
+	if err == nil {
+		return se.deleteAllServersInDB(dbc)
+	}
 	return err
 }
 
@@ -400,43 +403,38 @@ func ServerEvaluationListFactory(dbc interface{}) ([]ServerEvaluation, error) {
 	return serverEvaluations, err
 }
 
-func (se *ServerEvaluation) listServers(dbc interface{}) {
-	se.Servers, _ = ServerListFactory(se.Id, dbc)
+func (se *ServerEvaluation) listServers(dbc interface{}) error {
+	servers, err := ServerListFactory(se.Id, dbc)
+	se.Servers = servers
+	return err
 }
 
-func SearchLastEvaluations(domainName string, EvaluationInProgress bool,
-	lastNItems int, dbc interface{}) (lastServerEvaluations []ServerEvaluation, err error) {
-
-	if lastNItems <= 0 {
-		err = &CustomError{`lastNItems needs to be a positive integer`}
-		return
-	}
+func (se *ServerEvaluation) SearchLastEvaluation(domainName string, EvaluationInProgress bool,
+	upperBound time.Time, dbc interface{}) error {
 
 	var serverEvaluations []ServerEvaluation
 	sqlStatement := `SELECT id, domain, EvaluationHour, EvaluationInProgress, sslGrade, isDown
 		FROM serverEvaluation WHERE domain = $1 AND EvaluationInProgress = $2;`
-	var rows *sql.Rows
-	rows, err = Query(dbc, sqlStatement, domainName, EvaluationInProgress)
-
+	rows, err := Query(dbc, sqlStatement, domainName, EvaluationInProgress)
 	if err != nil {
-		return
+		return err
 	}
 
 	for rows.Next() {
 		var seTmp ServerEvaluation
 		if err = rows.Scan(&seTmp.Id, &seTmp.Domain, &seTmp.EvaluationHour, &seTmp.EvaluationInProgress,
 			&seTmp.SslGrade, &seTmp.IsDown); err != nil {
-			return
+			return err
 		}
 		serverEvaluations = append(serverEvaluations, seTmp)
 	}
 
 	if err = rows.Err(); err != nil {
-		return
+		return err
 	}
 
 	if len(serverEvaluations) == 0 {
-		return
+		return err
 	}
 
 	lowestBound := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -446,60 +444,90 @@ func SearchLastEvaluations(domainName string, EvaluationInProgress bool,
 	for _, v := range serverEvaluations {
 		var d time.Time
 		d, err = time.Parse(time.RFC3339, v.EvaluationHour)
-		if d.After(highest) {
+		if err != nil {
+			return err
+		}
+		if d.After(highest) && d.Before(upperBound) {
 			highest = d
 			highestID = v.Id
 		}
 	}
 
-	se1 := ServerEvaluation{Id: highestID}
-	se1.selectInDB(dbc)
-	lastServerEvaluations = append(lastServerEvaluations, se1)
-
-	for i := 2; i <= lastNItems; i++ {
-		if len(serverEvaluations)-i < 0 {
-			return
-		}
-		higher := lowestBound
-		higherID := 0
-
-		for _, v := range serverEvaluations {
-			var d time.Time
-			d, err = time.Parse(time.RFC3339, v.EvaluationHour)
-			if d.After(higher) && d.Before(highest) {
-				higher = d
-				higherID = v.Id
-			}
-		}
-
-		seTmp := ServerEvaluation{Id: higherID}
-		seTmp.selectInDB(dbc)
-		lastServerEvaluations = append(lastServerEvaluations, seTmp)
-		highest = higher
-	}
-	return
-}
-
-func (se *ServerEvaluation) SearchLastEvaluation(domainName string, EvaluationInProgress bool,
-	dbc interface{}) error {
-	lastEvaluations, err := SearchLastEvaluations(domainName, EvaluationInProgress, 1, dbc)
-	if err == nil {
-		if len(lastEvaluations) > 0 {
-			se.Copy(lastEvaluations[0])
-		}
-	}
+	se.Id = highestID
+	se.selectInDB(dbc)
 	return err
 }
 
+var SLStatus = newSLSRegistry()
+
+func newSLSRegistry() *slsRegistry {
+	return &slsRegistry{
+		NoPastEvaluation: 0,
+		Unchanged:        1,
+		Changed:          2,
+	}
+}
+
+type slsRegistry struct {
+	NoPastEvaluation int
+	Unchanged        int
+	Changed          int
+}
+
+func (se *ServerEvaluation) HaveServersChanged(dbc interface{}) (int, error) {
+	EvaluationHour, err := time.Parse(time.RFC3339, se.EvaluationHour)
+	if err != nil {
+		return SLStatus.NoPastEvaluation, err
+	}
+	EvaluationHourS1H := EvaluationHour.Add(time.Hour * -1)
+
+	seTmp := ServerEvaluation{}
+	err = seTmp.SearchLastEvaluation(se.Domain, false, EvaluationHourS1H, dbc)
+	if err != nil {
+		return SLStatus.NoPastEvaluation, err
+	}
+	if seTmp.Id == 0 {
+		return SLStatus.NoPastEvaluation, nil
+	}
+	err = seTmp.listServers(dbc)
+	if err != nil {
+		return SLStatus.NoPastEvaluation, err
+	}
+
+	if !CompareServerList(seTmp.Servers, se.Servers) {
+		return SLStatus.Changed, nil
+	}
+
+	return SLStatus.Unchanged, nil
+}
+
+func (se *ServerEvaluation) PreviousSSLgrade(dbc interface{}) (string, error) {
+	EvaluationHour, err := time.Parse(time.RFC3339, se.EvaluationHour)
+	if err != nil {
+		return `NO EVALUATION`, err
+	}
+	EvaluationHourS1H := EvaluationHour.Add(time.Hour * -1)
+
+	seTmp := ServerEvaluation{}
+	err = seTmp.SearchLastEvaluation(se.Domain, false, EvaluationHourS1H, dbc)
+	if err != nil {
+		return `NO EVALUATION`, err
+	}
+	if seTmp.Id == 0 {
+		return `NO EVALUATION`, nil
+	}
+
+	return seTmp.SslGrade, nil
+}
+
 func MakeEvaluationInDomain(domainName string, currentHour time.Time, makeEvaluation func(string) (ServerEvaluation, error),
-	dbc interface{}) (st ServerEvaluation, err error) {
+	dbc interface{}) (se ServerEvaluation, err error) {
 
 	// 1) In the database, is there a server Evaluation in process
 	// with the same given domain?
 	pendingEvaluation := ServerEvaluation{}
-	err = pendingEvaluation.SearchLastEvaluation(domainName, true, dbc)
+	err = pendingEvaluation.SearchLastEvaluation(domainName, true, currentHour, dbc)
 	if err != nil {
-		fmt.Println(err)
 		return
 	}
 	if pendingEvaluation.Id != 0 {
@@ -543,7 +571,7 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, makeEvalua
 	} else {
 		// 1.2) NO: Is there a past server Evaluation, ready, with the same given domain?
 		pastEvaluation := ServerEvaluation{}
-		err = pastEvaluation.SearchLastEvaluation(domainName, false, dbc)
+		err = pastEvaluation.SearchLastEvaluation(domainName, false, currentHour, dbc)
 		if pastEvaluation.Id != 0 {
 			// 1.2.1) YES: Is difference lower than 20 seconds?
 			var pastEvaluationHour time.Time

@@ -92,3 +92,92 @@ func testMakeEvaluationInDomainFunc(domainName string, currentHour time.Time, ma
 		}
 	}
 }
+
+// FUNCTION BLOCK
+// HaveServersChanged, PreviousSSLgrade
+func TestDBFunctions(t *testing.T) {
+	// DB TEST CONFIGURATION
+	db, err := initDB()
+	if err != nil {
+		t.Error(fmt.Sprintf("Exception: %v", err))
+	}
+	CleanDataInDB(db)
+
+	domainName := `prueba1.com`
+	currentHour1, _ := time.Parse(time.RFC3339, `2016-01-01T15:00:00+02:00`)
+
+	makeEvalCase1 := func(s string) (ServerEvaluation, error) {
+		servers1 := []Server{Server{Address: `128.30.20.10`}, Server{Address: `128.28.20.10`}}
+		return ServerEvaluation{1, s, `2016-01-01T15:00:00+02:00`, false, servers1, `A+`, false}, nil
+	}
+	se1, err := MakeEvaluationInDomain(domainName, currentHour1, makeEvalCase1, db)
+	t.Run("ServersChanged | CASE 1: NO PAST SERVER EVALUATIONS IN DATABASE",
+		testHaveServersChangedFunc(se1, db, SLStatus.NoPastEvaluation))
+	t.Run("PreviousSSlGrade | CASE 1: NO PAST SERVER EVALUATIONS IN DATABASE",
+		testPreviousSSLGradeFunc(se1, db, "NO EVALUATION"))
+	// testPreviousSSLGradeFunc(se ServerEvaluation, db *sql.DB, expected string)
+
+	domainName = `prueba1.com`
+	currentHour2, _ := time.Parse(time.RFC3339, `2016-01-01T15:30:00+02:00`)
+	makeEvalCase2 := func(s string) (ServerEvaluation, error) {
+		servers2 := []Server{Server{Address: `128.30.20.10`}, Server{Address: `128.28.20.10`}}
+		return ServerEvaluation{1, s, `2016-01-01T15:30:00+02:00`, false, servers2, `A+`, false}, nil
+	}
+	se2, err := MakeEvaluationInDomain(domainName, currentHour2, makeEvalCase2, db)
+	t.Run("ServersChanged | CASE 2: NO PAST SERVER EVALUATIONS ONE HOUR BEFORE",
+		testHaveServersChangedFunc(se2, db, SLStatus.NoPastEvaluation))
+	t.Run("PreviousSSlGrade | CASE 2: NO PAST SERVER EVALUATIONS ONE HOUR BEFORE",
+		testPreviousSSLGradeFunc(se2, db, "NO EVALUATION"))
+
+	domainName = `prueba1.com`
+	currentHour3, _ := time.Parse(time.RFC3339, `2016-01-01T16:20:00+02:00`)
+	makeEvalCase3 := func(s string) (ServerEvaluation, error) {
+		servers3 := []Server{Server{Address: `128.30.20.10`}, Server{Address: `128.28.20.10`}}
+		return ServerEvaluation{1, s, `2016-01-01T16:20:00+02:00`, false, servers3, `A+`, false}, nil
+	}
+
+	se3, err := MakeEvaluationInDomain(domainName, currentHour3, makeEvalCase3, db)
+	t.Run("ServersChanged | CASE 3: PAST SERVER EVALUATION IN DATABASE | SERVER LIST UNCHANGED",
+		testHaveServersChangedFunc(se3, db, SLStatus.Unchanged))
+	t.Run("PreviousSSlGrade | CASE 3: PAST SERVER EVALUATION IN DATABASE | PREVIOUS SSL GRADE UNCHANGED",
+		testPreviousSSLGradeFunc(se3, db, "A+"))
+
+	domainName = `prueba1.com`
+	currentHour4, _ := time.Parse(time.RFC3339, `2016-01-01T16:25:00+02:00`)
+	makeEvalCase4 := func(s string) (ServerEvaluation, error) {
+		servers4 := []Server{Server{Address: `128.30.28.10`}, Server{Address: `128.28.20.10`}}
+		return ServerEvaluation{1, s, `2016-01-01T16:25:00+02:00`, false, servers4, `B+`, false}, nil
+	}
+	se4, err := MakeEvaluationInDomain(domainName, currentHour4, makeEvalCase4, db)
+	t.Run("ServersChanged | CASE 4: PAST SERVER EVALUATION IN DATABASE | SERVER LIST CHANGED",
+		testHaveServersChangedFunc(se4, db, SLStatus.Changed))
+	t.Run("PreviousSSlGrade | CASE 4: PAST SERVER EVALUATION IN DATABASE | PREVIOUS SSL GRADE CHANGED",
+		testPreviousSSLGradeFunc(se4, db, "A+"))
+
+	CleanDataInDB(db)
+	db.Close()
+}
+
+func testHaveServersChangedFunc(se ServerEvaluation, db *sql.DB, expected int) func(*testing.T) {
+	return func(t *testing.T) {
+		actual, err := se.HaveServersChanged(db)
+		if err != nil {
+			t.Error(fmt.Sprintf("Exception: %v", err))
+		}
+		if !cmp.Equal(actual, expected) {
+			t.Error(fmt.Sprintf("Expected: %v, Actual: %v", expected, actual))
+		}
+	}
+}
+
+func testPreviousSSLGradeFunc(se ServerEvaluation, db *sql.DB, expected string) func(*testing.T) {
+	return func(t *testing.T) {
+		actual, err := se.PreviousSSLgrade(db)
+		if err != nil {
+			t.Error(fmt.Sprintf("Exception: %v", err))
+		}
+		if !cmp.Equal(actual, expected) {
+			t.Error(fmt.Sprintf("Expected: %v, Actual: %v", expected, actual))
+		}
+	}
+}
