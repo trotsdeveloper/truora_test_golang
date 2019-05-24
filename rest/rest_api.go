@@ -7,7 +7,8 @@ import (
 	"regexp"
 
 	"github.com/trotsdeveloper/truora_test/truora_test_golang/dao"
-	"github.com/trotsdeveloper/truora_test/truora_test_golang/parsers"
+	"github.com/trotsdeveloper/truora_test/truora_test_golang/scrapers"
+	//"github.com/trotsdeveloper/truora_test/truora_test_golang/dao"
 )
 
 func TestEndPoint(w http.ResponseWriter, r *http.Request) {
@@ -19,8 +20,8 @@ func TestEndPoint(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("%q\n", re.FindAllStringSubmatch("-axxb-ab-", -1))
 
 	domain := "54.239.132.139"
-	country, err := parsers.EvaluateServerCountry(domain)
-	serverOwner, err := parsers.EvaluateServerOwner(domain)
+	country, err := scrapers.ScraperCountry(domain)
+	serverOwner, err := scrapers.ScraperOwner(domain)
 	if err != nil {
 		fmt.Println(err)
 	} else {
@@ -43,6 +44,8 @@ func TestEndPoint(w http.ResponseWriter, r *http.Request) {
 }
 
 func EvaluateServerEndPoint(w http.ResponseWriter, r *http.Request) {
+
+	//http.Get(svr.URL)
 	mapJson := map[string]int{"TEST": 1}
 	mapB, _ := json.Marshal(mapJson)
 	mapS := string(mapB[:])

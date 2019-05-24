@@ -2,6 +2,7 @@ package dao
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -32,15 +33,6 @@ func InitDB() (*sql.DB, error) {
 	return db, err
 }
 
-// CustomError ...
-type CustomError struct {
-	CustomMessage string
-}
-
-func (e *CustomError) Error() string {
-	return fmt.Sprintf("%s", e.CustomMessage)
-}
-
 func addQuotes(word string) string {
 	return fmt.Sprintf(`'%v'`, word)
 }
@@ -56,23 +48,29 @@ type Server struct {
 
 // ServerEvaluation ...
 type ServerEvaluation struct {
-	Id                   int    // SERIAL PRIMARY KEY
-	Domain               string // VARCHAR[100]
-	EvaluationHour       string // VARCHAR[30]
-	EvaluationInProgress bool   // boolean
-	Servers              []Server
-	SslGrade             string // VARCHAR [5]
-	IsDown               bool   // boolean
+	Id                   int      `json:"-"`           // SERIAL PRIMARY KEY
+	Domain               string   `json:"domain"`      // VARCHAR[100]
+	EvaluationHour       string   `json:"hour"`        // VARCHAR[30]
+	EvaluationInProgress bool     `json:"in_progress"` // boolean
+	Servers              []Server `json:"-"`
+	SslGrade             string   `json:"ssl_grade"` // VARCHAR [5]
+	IsDown               bool     `json:"is_down"`   // boolean
 }
 
-func (se *ServerEvaluation) Copy(sec ServerEvaluation) {
-	se.Id = sec.Id
-	se.Domain = sec.Domain
-	se.EvaluationHour = sec.EvaluationHour
-	se.EvaluationInProgress = sec.EvaluationInProgress
-	se.Servers = sec.Servers
-	se.SslGrade = sec.SslGrade
-	se.IsDown = sec.IsDown
+type ServerEvaluationComplete struct {
+	Servers          []Server `json:"servers"`
+	ServersChanged   bool     `json:"servers_changed"`
+	SslGrade         string   `json:"ssl_grade"` // VARCHAR [5]
+	PreviousSslGrade string   `json:"previous_ssl_grade"`
+	Logo             string   `json:"logo"`
+	Title            string   `json:"title"`
+	IsDown           bool     `json:"is_down"` // boolean
+}
+
+func (sec *ServerEvaluationComplete) Copy(se ServerEvaluation) {
+	sec.Servers = se.Servers
+	sec.SslGrade = se.SslGrade
+	sec.IsDown = se.IsDown
 }
 
 func CompareServer(s1, s2 Server) bool {
@@ -118,7 +116,7 @@ func Exec(dbc interface{}, sqlString string, args ...interface{}) (r sql.Result,
 	case *sql.Tx:
 		r, err = v.Exec(sqlString, args...)
 	default:
-		err = &CustomError{"No valid DB Controller"}
+		err = errors.New("No valid DB Controller")
 	}
 	return
 }
@@ -130,7 +128,7 @@ func QueryRow(dbc interface{}, sqlString string, args ...interface{}) (r *sql.Ro
 	case *sql.Tx:
 		r = v.QueryRow(sqlString, args...)
 	default:
-		err = &CustomError{"No valid DB Controller"}
+		err = errors.New("No valid DB Controller")
 	}
 	return
 }
@@ -142,7 +140,7 @@ func Query(dbc interface{}, sqlString string, args ...interface{}) (r *sql.Rows,
 	case *sql.Tx:
 		r, err = v.Query(sqlString, args...)
 	default:
-		err = &CustomError{"No valid DB Controller"}
+		err = errors.New("No valid DB Controller")
 	}
 	return
 }
@@ -206,7 +204,7 @@ func (s *Server) selectInDB(dbc interface{}) error {
 	err = row.Scan(&s.Address, &s.SslGrade, &s.Country, &s.Owner)
 	switch err {
 	case sql.ErrNoRows:
-		return &CustomError{"No rows were returned."}
+		return errors.New("No rows were returned.")
 	case nil:
 		return nil
 	default:
@@ -263,7 +261,7 @@ func (se *ServerEvaluation) selectInDB(dbc interface{}) error {
 	err = row.Scan(&se.Domain, &se.EvaluationHour, &se.EvaluationInProgress, &se.SslGrade, &se.IsDown)
 	switch err {
 	case sql.ErrNoRows:
-		return &CustomError{"No rows were returned."}
+		return errors.New("No rows were returned.")
 	case nil:
 		return nil
 	default:
