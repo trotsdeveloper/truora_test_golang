@@ -34,11 +34,11 @@ func InitDB() (*sql.DB, error) {
 
 // CustomError ...
 type CustomError struct {
-	customMessage string
+	CustomMessage string
 }
 
 func (e *CustomError) Error() string {
-	return fmt.Sprintf("%s", e.customMessage)
+	return fmt.Sprintf("%s", e.CustomMessage)
 }
 
 func addQuotes(word string) string {
@@ -339,7 +339,7 @@ func (se *ServerEvaluation) deleteInDB(dbc interface{}) error {
 	return err
 }
 
-func ServerEvaluationListFactory(dbc interface{}) ([]ServerEvaluation, error) {
+func ListServerEvaluations(dbc interface{}) ([]ServerEvaluation, error) {
 	var serverEvaluations []ServerEvaluation
 	sqlStatement := `SELECT id, domain, EvaluationHour, EvaluationInProgress, sslGrade, isDown FROM serverEvaluation;`
 	rows, err := Query(dbc, sqlStatement)
@@ -364,7 +364,45 @@ func ServerEvaluationListFactory(dbc interface{}) ([]ServerEvaluation, error) {
 	return serverEvaluations, err
 }
 
-func ServerListFactoryID(idServerEvaluation int, dbc interface{}) ([]Server, error) {
+func ListRecentServerEvaluations(dbc interface{}) (sel []ServerEvaluation, err error) {
+	sel, err = ListServerEvaluations(dbc)
+	if err != nil {
+		return
+	}
+	domains := make(map[string][]ServerEvaluation)
+
+	for i, _ := range sel {
+		if arr, ok := domains[sel[i].Domain]; ok {
+			arr = append(arr, sel[i])
+			domains[sel[i].Domain] = arr
+		} else {
+			domains[sel[i].Domain] = make([]ServerEvaluation, 0)
+		}
+	}
+
+	for _, selByDomain := range domains {
+		lowestBound := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+		highest := lowestBound
+		highestSE := ServerEvaluation{}
+
+		for _, v := range selByDomain {
+			var d time.Time
+			d, err = time.Parse(time.RFC3339, v.EvaluationHour)
+			if err != nil {
+				return
+			}
+			if d.After(highest) {
+				highest = d
+				highestSE = v
+			}
+		}
+		sel = append(sel, highestSE)
+
+	}
+	return
+}
+
+func ListServersID(idServerEvaluation int, dbc interface{}) ([]Server, error) {
 	var servers []Server
 	sqlStatement := `SELECT id, address, sslGrade, country, owner FROM server
 						WHERE serverEvaluationId = $1;`
@@ -390,7 +428,7 @@ func ServerListFactoryID(idServerEvaluation int, dbc interface{}) ([]Server, err
 }
 
 func (se *ServerEvaluation) listServers(dbc interface{}) error {
-	servers, err := ServerListFactoryID(se.Id, dbc)
+	servers, err := ListServersID(se.Id, dbc)
 	se.Servers = servers
 	return err
 }
@@ -508,7 +546,6 @@ func (se *ServerEvaluation) PreviousSSLgrade(dbc interface{}) (string, error) {
 
 func MakeEvaluationInDomain(domainName string, currentHour time.Time, makeEvaluation func(string) (ServerEvaluation, error),
 	dbc interface{}) (se ServerEvaluation, err error) {
-
 	// 1) In the database, is there a server Evaluation in process
 	// with the same given domain?
 	pendingEvaluation := ServerEvaluation{}
@@ -528,7 +565,8 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, makeEvalua
 		if pendingEvaluationHourA20.After(currentHour) {
 			// 1.1.1) YES: In the database, data will remain unchanged
 			// return the pending Evaluation
-			return pendingEvaluation, err
+			se = pendingEvaluation
+			return
 		} else {
 			// 1.1.2) Update the hour of the pending Evaluation with the current hour
 			pendingEvaluation.EvaluationHour = currentHour.Format(time.RFC3339)
@@ -545,13 +583,15 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, makeEvalua
 			// 1.1.2) NO: In SSLabs, Is the server Evaluation in process?
 			if currentEvaluation.EvaluationInProgress {
 				// 1.1.2.1) YES: Return the pending Evaluation with the new hour
-				return pendingEvaluation, err
+				se = pendingEvaluation
+				return
 			} else {
 				// 1.1.2.2) NO: Update the pending Evaluation in the database, with
 				// the information of the current Evaluation
 				currentEvaluation.Id = pendingEvaluation.Id
 				err = currentEvaluation.updateInDB(dbc)
-				return currentEvaluation, err
+				se = currentEvaluation
+				return
 			}
 		}
 	} else {
@@ -569,7 +609,8 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, makeEvalua
 			if pastEvaluationHourA20.After(currentHour) {
 				// 1.2.1.1) YES: In the database, data will remain unchanged,
 				// return the past Evaluation
-				return pastEvaluation, err
+				se = pastEvaluation
+				return
 			} else {
 				// 1.2.1.2) NO: Make a server Evaluation from SSLabs, save it in DB.
 				var currentEvaluation ServerEvaluation
@@ -578,7 +619,8 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, makeEvalua
 					return
 				}
 				err = currentEvaluation.createInDB(dbc)
-				return currentEvaluation, err
+				se = currentEvaluation
+				return
 			}
 		} else {
 			// 1.2.2) NO: Make a server Evaluation from SSLabs, save it in DB.
@@ -588,7 +630,8 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, makeEvalua
 				return
 			}
 			err = currentEvaluation.createInDB(dbc)
-			return currentEvaluation, err
+			se = currentEvaluation
+			return
 		}
 	}
 }
