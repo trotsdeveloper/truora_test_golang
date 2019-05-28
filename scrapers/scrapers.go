@@ -3,6 +3,7 @@ package scrapers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"regexp"
@@ -58,7 +59,7 @@ func ScraperOwner(ip string) (s string, err error) {
 
 func getHTMLinDomain(domain string) (htmlB []byte, err error) {
 	var resp *http.Response
-	resp, err = http.Get(domain)
+	resp, err = http.Get(fmt.Sprintf("http://%v/", domain))
 	if err != nil {
 		return
 	}
@@ -137,7 +138,7 @@ func ScraperTitle(domain string) (s string, err error) {
 	return f(doc), nil
 }
 
-func ScraperSSLabs(domain string) (se dao.ServerEvaluation, err error) {
+func ScraperSSLabs(currentHour time.Time, domain string) (se dao.ServerEvaluation, err error) {
 	byt, err := getHTMLinDomain(domain)
 	if err != nil {
 		return
@@ -160,11 +161,13 @@ func ScraperSSLabs(domain string) (se dao.ServerEvaluation, err error) {
 	}
 
 	// Assignation in server evaluation
-	se = dao.ServerEvaluation{}
+	//se = dao.ServerEvaluation{}
 
 	se.Domain = domain
-	t := time.Now()
-	se.EvaluationHour = t.Format(time.RFC3339)
+	se.EvaluationHour = currentHour.Format(time.RFC3339)
+	fmt.Println(fmt.Sprintf("Detect changes 2"))
+
+	//fmt.Println(fmt.Sprintf("SSLabs hour what: %v", se.EvaluationHour))
 
 	if status == "DNS" || status == "IN_PROGRESS" {
 		se.EvaluationInProgress = true
@@ -206,5 +209,34 @@ func ScraperSSLabs(domain string) (se dao.ServerEvaluation, err error) {
 	}
 
 	se.Servers = servers
+	return
+}
+
+func ScraperTestComplete(domain string, currentHour time.Time, dbc interface{}) (sec dao.ServerEvaluationComplete, err error) {
+	sec = dao.ServerEvaluationComplete{}
+
+	var se dao.ServerEvaluation
+	se, err = dao.MakeEvaluationInDomain(domain, currentHour, ScraperSSLabs, dbc)
+	fmt.Println(fmt.Sprintf("Evaluation hour: %v", se.EvaluationHour))
+
+	sec.Copy(se)
+
+	if !se.IsDown {
+		sec.Logo, err = ScraperLogo(domain)
+		sec.Title, err = ScraperTitle(domain)
+	}
+
+	if !se.EvaluationInProgress && !se.IsDown {
+		for i := range sec.Servers {
+			ip := sec.Servers[i].Address
+			sec.Servers[i].Country, err = ScraperCountry(ip)
+			sec.Servers[i].Owner, err = ScraperOwner(ip)
+		}
+		var serversChangedI int
+		serversChangedI, err = se.HaveServersChanged(dbc)
+		sec.ServersChanged = (serversChangedI == dao.SLStatus.Changed)
+		sec.PreviousSslGrade, err = se.PreviousSSLgrade(dbc)
+	}
+
 	return
 }

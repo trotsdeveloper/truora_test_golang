@@ -13,22 +13,27 @@ import (
 // Constants
 const (
 	USER        = "manuelams"
+	PASSWORD    = "11235813"
 	HOST        = "localhost"
 	PORT        = 26257
 	DATABASE    = "servers"
 	SSL         = true
 	SSLMODE     = "require"
-	SSLROOTCERT = "../certs/ca.crt"
-	SSLKEY      = "../certs/client.manuelams.key"
-	SSLCERT     = "../certs/client.manuelams.crt"
+	SSLROOTCERT = "../../certs/ca.crt"
+	SSLKEY      = "../../certs/client.manuelams.key"
+	SSLCERT     = "../../certs/client.manuelams.crt"
+)
+
+var (
+	DBConf *sql.DB
 )
 
 func InitDB() (*sql.DB, error) {
 	/*db, err := sql.Open("postgres",
 	"postgresql://manuelams@localhost:26257/servers?ssl=true&sslmode=require&sslrootcert=../certs/ca.crt&sslkey=../certs/client.manuelams.key&sslcert=../certs/client.manuelams.crt")
 	*/
-	psqlInfo := fmt.Sprintf("postgresql://%s@%s:%s/%s?ssl=%s&sslmode=%s&sslrootcert=%s&sslkey=%s&sslcert=%s",
-		USER, HOST, strconv.Itoa(PORT), DATABASE, strconv.FormatBool(SSL), SSLMODE, SSLROOTCERT, SSLKEY, SSLCERT)
+	psqlInfo := fmt.Sprintf("postgresql://%s:%s@%s:%s/%s?ssl=%s&sslmode=%s&sslrootcert=%s&sslkey=%s&sslcert=%s",
+		USER, PASSWORD, HOST, strconv.Itoa(PORT), DATABASE, strconv.FormatBool(SSL), SSLMODE, SSLROOTCERT, SSLKEY, SSLCERT)
 	db, err := sql.Open("postgres", psqlInfo)
 	return db, err
 }
@@ -542,7 +547,7 @@ func (se *ServerEvaluation) PreviousSSLgrade(dbc interface{}) (string, error) {
 	return seTmp.SslGrade, nil
 }
 
-func MakeEvaluationInDomain(domainName string, currentHour time.Time, makeEvaluation func(string) (ServerEvaluation, error),
+func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator func(time.Time, string) (ServerEvaluation, error),
 	dbc interface{}) (se ServerEvaluation, err error) {
 	// 1) In the database, is there a server Evaluation in process
 	// with the same given domain?
@@ -574,7 +579,7 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, makeEvalua
 			}
 
 			var currentEvaluation ServerEvaluation
-			currentEvaluation, err = makeEvaluation(domainName)
+			currentEvaluation, err = evaluator(currentHour, domainName)
 			if err != nil {
 				return
 			}
@@ -612,7 +617,7 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, makeEvalua
 			} else {
 				// 1.2.1.2) NO: Make a server Evaluation from SSLabs, save it in DB.
 				var currentEvaluation ServerEvaluation
-				currentEvaluation, err = makeEvaluation(domainName)
+				currentEvaluation, err = evaluator(currentHour, domainName)
 				if err != nil {
 					return
 				}
@@ -623,7 +628,7 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, makeEvalua
 		} else {
 			// 1.2.2) NO: Make a server Evaluation from SSLabs, save it in DB.
 			var currentEvaluation ServerEvaluation
-			currentEvaluation, err = makeEvaluation(domainName)
+			currentEvaluation, err = evaluator(currentHour, domainName)
 			if err != nil {
 				return
 			}

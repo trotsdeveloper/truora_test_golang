@@ -21,7 +21,7 @@ func TestMakeEvaluationInDomain(t *testing.T) {
 	domainName := `prueba1.com`
 	currentHour1, _ := time.Parse(time.RFC3339, `2016-01-01T15:00:00+02:00`)
 	expected1 := ServerEvaluation{1, domainName, `2016-01-01T15:00:00+02:00`, true, make([]Server, 0), ``, false}
-	makeEvalCase1 := func(s string) (ServerEvaluation, error) {
+	makeEvalCase1 := func(t time.Time, s string) (ServerEvaluation, error) {
 		return expected1, nil
 	}
 	t.Run("CASE 1: NO PENDING EVALUATION AND NO PAST EVALUATION HOUR ",
@@ -29,9 +29,9 @@ func TestMakeEvaluationInDomain(t *testing.T) {
 
 	domainName = `prueba1.com`
 	currentHour2, _ := time.Parse(time.RFC3339, `2016-01-01T15:00:15+02:00`)
-	expected2 := ServerEvaluation{2, domainName, `2016-01-01T15:00:15+02:00`, true, make([]Server, 0), ``, false}
-	makeEvalCase2 := func(s string) (ServerEvaluation, error) {
-		return expected2, nil
+	expected2 := expected1
+	makeEvalCase2 := func(t time.Time, s string) (ServerEvaluation, error) {
+		return ServerEvaluation{2, domainName, `2016-01-01T15:00:15+02:00`, true, make([]Server, 0), ``, false}, nil
 	}
 
 	t.Run("CASE 2: PENDING EVALUATION, CURRENT EVALUATION HOUR < PENDING EVALUATION HOUR + 20S",
@@ -40,7 +40,7 @@ func TestMakeEvaluationInDomain(t *testing.T) {
 	domainName = `prueba1.com`
 	currentHour3, _ := time.Parse(time.RFC3339, `2016-01-01T15:00:25+02:00`)
 	expected3 := ServerEvaluation{3, domainName, `2016-01-01T15:00:25+02:00`, true, make([]Server, 0), ``, false}
-	makeEvalCase3 := func(s string) (ServerEvaluation, error) {
+	makeEvalCase3 := func(t time.Time, s string) (ServerEvaluation, error) {
 		return expected3, nil
 	}
 
@@ -50,7 +50,7 @@ func TestMakeEvaluationInDomain(t *testing.T) {
 	domainName = `prueba1.com`
 	currentHour4, _ := time.Parse(time.RFC3339, `2016-01-01T15:00:48+02:00`)
 	expected4 := ServerEvaluation{4, domainName, `2016-01-01T15:00:48+02:00`, false, make([]Server, 0), `A+`, false}
-	makeEvalCase4 := func(s string) (ServerEvaluation, error) {
+	makeEvalCase4 := func(t time.Time, s string) (ServerEvaluation, error) {
 		return expected4, nil
 	}
 	t.Run("CASE 4: PENDING EVALUATION, CURRENT HOUR > PENDING EVALUATION HOUR + 20 | !CURRENT EVALUATION IN PROGRESS ",
@@ -58,9 +58,9 @@ func TestMakeEvaluationInDomain(t *testing.T) {
 
 	domainName = `prueba1.com`
 	currentHour5, _ := time.Parse(time.RFC3339, `2016-01-01T15:01:01+02:00`)
-	expected5 := ServerEvaluation{5, domainName, `2016-01-01T15:01:01+02:00`, false, make([]Server, 0), `B+`, false}
-	makeEvalCase5 := func(s string) (ServerEvaluation, error) {
-		return expected5, nil
+	expected5 := expected4
+	makeEvalCase5 := func(t time.Time, s string) (ServerEvaluation, error) {
+		return ServerEvaluation{5, domainName, `2016-01-01T15:01:01+02:00`, false, make([]Server, 0), `B+`, false}, nil
 	}
 	t.Run("CASE 5: PAST EVALUATION, CURRENT HOUR < PAST EVALUATION HOUR + 20",
 		testMakeEvaluationInDomainFunc(domainName, currentHour5, makeEvalCase5, db, expected5))
@@ -68,8 +68,8 @@ func TestMakeEvaluationInDomain(t *testing.T) {
 	domainName = `prueba1.com`
 	currentHour6, _ := time.Parse(time.RFC3339, `2016-01-01T15:01:18+02:00`)
 	expected6 := ServerEvaluation{6, domainName, `2016-01-01T15:01:18+02:00`, false, make([]Server, 0), `B+`, false}
-	makeEvalCase6 := func(s string) (ServerEvaluation, error) {
-		return expected6, nil
+	makeEvalCase6 := func(t time.Time, s string) (ServerEvaluation, error) {
+		return ServerEvaluation{6, domainName, `2016-01-01T15:01:18+02:00`, false, make([]Server, 0), `B+`, false}, nil
 	}
 	t.Run("CASE 6: PAST EVALUATION, CURRENT HOUR > PAST EVALUATION HOUR + 20",
 		testMakeEvaluationInDomainFunc(domainName, currentHour6, makeEvalCase6, db, expected6))
@@ -78,10 +78,10 @@ func TestMakeEvaluationInDomain(t *testing.T) {
 	db.Close()
 }
 
-func testMakeEvaluationInDomainFunc(domainName string, currentHour time.Time, makeTest func(string) (ServerEvaluation, error),
+func testMakeEvaluationInDomainFunc(domainName string, currentHour time.Time, evaluator func(time.Time, string) (ServerEvaluation, error),
 	db *sql.DB, expected ServerEvaluation) func(*testing.T) {
 	return func(t *testing.T) {
-		actual, err := MakeEvaluationInDomain(domainName, currentHour, makeTest, db)
+		actual, err := MakeEvaluationInDomain(domainName, currentHour, evaluator, db)
 		if err != nil {
 			t.Error(fmt.Sprintf("Exception: %v", err))
 		}
@@ -107,7 +107,7 @@ func TestDBFunctions(t *testing.T) {
 	domainName := `prueba1.com`
 	currentHour1, _ := time.Parse(time.RFC3339, `2016-01-01T15:00:00+02:00`)
 
-	makeEvalCase1 := func(s string) (ServerEvaluation, error) {
+	makeEvalCase1 := func(t time.Time, s string) (ServerEvaluation, error) {
 		servers1 := []Server{Server{Address: `128.30.20.10`}, Server{Address: `128.28.20.10`}}
 		return ServerEvaluation{1, s, `2016-01-01T15:00:00+02:00`, false, servers1, `A+`, false}, nil
 	}
@@ -120,7 +120,7 @@ func TestDBFunctions(t *testing.T) {
 
 	domainName = `prueba1.com`
 	currentHour2, _ := time.Parse(time.RFC3339, `2016-01-01T15:30:00+02:00`)
-	makeEvalCase2 := func(s string) (ServerEvaluation, error) {
+	makeEvalCase2 := func(t time.Time, s string) (ServerEvaluation, error) {
 		servers2 := []Server{Server{Address: `128.30.20.10`}, Server{Address: `128.28.20.10`}}
 		return ServerEvaluation{1, s, `2016-01-01T15:30:00+02:00`, false, servers2, `A+`, false}, nil
 	}
@@ -132,7 +132,7 @@ func TestDBFunctions(t *testing.T) {
 
 	domainName = `prueba1.com`
 	currentHour3, _ := time.Parse(time.RFC3339, `2016-01-01T16:20:00+02:00`)
-	makeEvalCase3 := func(s string) (ServerEvaluation, error) {
+	makeEvalCase3 := func(t time.Time, s string) (ServerEvaluation, error) {
 		servers3 := []Server{Server{Address: `128.30.20.10`}, Server{Address: `128.28.20.10`}}
 		return ServerEvaluation{1, s, `2016-01-01T16:20:00+02:00`, false, servers3, `A+`, false}, nil
 	}
@@ -145,7 +145,7 @@ func TestDBFunctions(t *testing.T) {
 
 	domainName = `prueba1.com`
 	currentHour4, _ := time.Parse(time.RFC3339, `2016-01-01T16:25:00+02:00`)
-	makeEvalCase4 := func(s string) (ServerEvaluation, error) {
+	makeEvalCase4 := func(t time.Time, s string) (ServerEvaluation, error) {
 		servers4 := []Server{Server{Address: `128.30.28.10`}, Server{Address: `128.28.20.10`}}
 		return ServerEvaluation{1, s, `2016-01-01T16:25:00+02:00`, false, servers4, `B+`, false}, nil
 	}
