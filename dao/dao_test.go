@@ -16,6 +16,8 @@ func TestMakeEvaluationInDomain(t *testing.T) {
 	if err != nil {
 		t.Error(fmt.Sprintf("Exception: %v", err))
 	}
+	InitServerEvaluationTable(db)
+	InitServerTable(db)
 	CleanDataInDB(db)
 
 	domainName := `prueba1.com`

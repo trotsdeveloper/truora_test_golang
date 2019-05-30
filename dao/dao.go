@@ -159,7 +159,7 @@ func InitServerEvaluationTable(dbc *sql.DB) error {
 }
 func InitServerTable(dbc *sql.DB) error {
 	sqlStatement := `CREATE TABLE server (id SERIAL PRIMARY KEY,
-		serverEvaluationId integer,	address VARCHAR(16), sslGrade VARCHAR(5), country VARCHAR(20),
+		serverEvaluationId integer,	address VARCHAR(50), sslGrade VARCHAR(5), country VARCHAR(20),
 		owner VARCHAR(50), FOREIGN KEY(serverEvaluationId) REFERENCES serverEvaluation(id));`
 	_, err := dbc.Exec(sqlStatement)
 	return err
@@ -627,9 +627,13 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator 
 			}
 		} else {
 			// 1.2.2) NO: Make a server Evaluation from SSLabs, save it in DB.
+
 			var currentEvaluation ServerEvaluation
 			currentEvaluation, err = evaluator(currentHour, domainName)
 			if err != nil {
+				fmt.Println("MISTAKE HERE")
+				fmt.Println(fmt.Sprintf("No sense: %v", currentHour.Format(time.RFC3339)))
+				fmt.Println(fmt.Sprintf("HEY: %v", currentEvaluation))
 				return
 			}
 			err = currentEvaluation.createInDB(dbc)
