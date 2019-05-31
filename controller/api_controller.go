@@ -4,25 +4,28 @@ import (
   "time"
   "github.com/trotsdeveloper/truora_test/truora_test_golang/scrapers"
   "github.com/trotsdeveloper/truora_test/truora_test_golang/dao"
+  "github.com/cockroachdb/cockroach-go/crdb"
+  "database/sql"
+  "context"
 )
 
 var APIErrors = newAPIErrorsRegistry()
 
 func newAPIErrorsRegistry() *apiErrorsRegistry {
-	e601v := makeAPIError("601", "Error in database.")
-	e602v := makeAPIError("602", "Error in SSLabs API.")
-	e701v := makeAPIError("701", "Error getting Icon")
-	e702v := makeAPIError("702", "Error getting HTML Title")
-	e801v := makeAPIError("801", "Error getting country from WHOIS")
-	e802v := makeAPIError("802", "Error getting owner from WHOIS")
+	E601v := makeAPIError("601", "Error in database.")
+	E602v := makeAPIError("602", "Error in SSLabs API.")
+	E701v := makeAPIError("701", "Error getting Icon")
+	E702v := makeAPIError("702", "Error getting HTML Title")
+	E801v := makeAPIError("801", "Error getting country from WHOIS")
+	E802v := makeAPIError("802", "Error getting owner from WHOIS")
 
 	return &apiErrorsRegistry{
-		e601: e601v,
-		e602: e602v,
-		e701: e701v,
-		e702: e702v,
-		e801: e801v,
-		e802: e802v,
+		E601: E601v,
+		E602: E602v,
+		E701: E701v,
+		E702: E702v,
+		E801: E801v,
+		E802: E802v,
 	}
 }
 
@@ -33,12 +36,12 @@ func makeAPIError(code string, description string) func(error) (APIError) {
 }
 
 type apiErrorsRegistry struct {
-	e601 func(error) (APIError) //
-	e602 func(error) (APIError) //
-	e701 func(error) (APIError) //
-	e702 func(error) (APIError) //
-	e801 func(error) (APIError) //
-	e802 func(error) (APIError) //
+	E601 func(error) (APIError) //
+	E602 func(error) (APIError) //
+	E701 func(error) (APIError) //
+	E702 func(error) (APIError) //
+	E801 func(error) (APIError) //
+	E802 func(error) (APIError) //
 }
 
 type APIError struct {
@@ -62,15 +65,16 @@ func (x *APIError) IsInArray(a []APIError) bool {
 }
 
 func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator func(time.Time, string) (dao.ServerEvaluation, error),
-	dbc interface{}) (se dao.ServerEvaluation, appErr APIError) {
+	db *sql.DB) (se dao.ServerEvaluation, appErr APIError) {
 	// 1) In the database, is there a server Evaluation in process
 	// with the same given domain?
   appErr = DefaultAPIError()
   var err error
 	pendingEvaluation := dao.ServerEvaluation{}
-	err = pendingEvaluation.SearchLastEvaluation(domainName, true, currentHour, dbc)
+
+	err = pendingEvaluation.SearchLastEvaluation(domainName, true, currentHour, db)
 	if err != nil {
-    appErr = APIErrors.e601(err)
+    appErr = APIErrors.E601(err)
 		return
 	}
 	if pendingEvaluation.Id != 0 {
@@ -79,7 +83,7 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator 
 		var pendingEvaluationHour time.Time
 		pendingEvaluationHour, err = time.Parse(time.RFC3339, pendingEvaluation.EvaluationHour)
 		if err != nil {
-      appErr = APIErrors.e601(err)
+      appErr = APIErrors.E601(err)
 			return
 		}
 		pendingEvaluationHourA20 := pendingEvaluationHour.Add(time.Second * 20)
@@ -91,16 +95,16 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator 
 		} else {
 			// 1.1.2) Update the hour of the pending Evaluation with the current hour
 			pendingEvaluation.EvaluationHour = currentHour.Format(time.RFC3339)
-			err = pendingEvaluation.UpdateHourInDb(dbc)
+			err = pendingEvaluation.UpdateHourInDb(db)
 			if err != nil {
-        appErr = APIErrors.e601(err)
+        appErr = APIErrors.E601(err)
 				return
 			}
 
 			var currentEvaluation dao.ServerEvaluation
 			currentEvaluation, err = evaluator(currentHour, domainName)
 			if err != nil {
-        appErr = APIErrors.e602(err)
+        appErr = APIErrors.E602(err)
 				return
 			}
 			// 1.1.2) NO: In SSLabs, Is the server Evaluation in process?
@@ -112,9 +116,11 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator 
 				// 1.1.2.2) NO: Update the pending Evaluation in the database, with
 				// the information of the current Evaluation
 				currentEvaluation.Id = pendingEvaluation.Id
-				err = currentEvaluation.UpdateInDB(dbc)
+        err = crdb.ExecuteTx(context.Background(), db, nil, func(tx *sql.Tx) error {
+          return currentEvaluation.UpdateInDB(tx)
+        })
         if err != nil {
-          appErr = APIErrors.e601(err)
+          appErr = APIErrors.E601(err)
           return
         }
 				se = currentEvaluation
@@ -124,9 +130,9 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator 
 	} else {
 		// 1.2) NO: Is there a past server Evaluation, ready, with the same given domain?
 		pastEvaluation := dao.ServerEvaluation{}
-		err = pastEvaluation.SearchLastEvaluation(domainName, false, currentHour, dbc)
+		err = pastEvaluation.SearchLastEvaluation(domainName, false, currentHour, db)
     if err != nil {
-      appErr = APIErrors.e601(err)
+      appErr = APIErrors.E601(err)
       return
     }
 		if pastEvaluation.Id != 0 {
@@ -134,7 +140,7 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator 
 			var pastEvaluationHour time.Time
 			pastEvaluationHour, err = time.Parse(time.RFC3339, pastEvaluation.EvaluationHour)
 			if err != nil {
-        appErr = APIErrors.e601(err)
+        appErr = APIErrors.E601(err)
 				return
 			}
 			pastEvaluationHourA20 := pastEvaluationHour.Add(time.Second * 20)
@@ -148,12 +154,14 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator 
 				var currentEvaluation dao.ServerEvaluation
 				currentEvaluation, err = evaluator(currentHour, domainName)
 				if err != nil {
-          appErr = APIErrors.e602(err)
+          appErr = APIErrors.E602(err)
 					return
 				}
-				err = currentEvaluation.CreateInDB(dbc)
+        err = crdb.ExecuteTx(context.Background(), db, nil, func(tx *sql.Tx) error {
+          return currentEvaluation.CreateInDB(tx)
+        })
         if err != nil {
-          appErr =  APIErrors.e601(err)
+          appErr =  APIErrors.E601(err)
           return
         }
 				se = currentEvaluation
@@ -165,12 +173,14 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator 
 			var currentEvaluation dao.ServerEvaluation
 			currentEvaluation, err = evaluator(currentHour, domainName)
 			if err != nil {
-        appErr = APIErrors.e602(err)
+        appErr = APIErrors.E602(err)
 				return
 			}
-			err = currentEvaluation.CreateInDB(dbc)
+      err = crdb.ExecuteTx(context.Background(), db, nil, func(tx *sql.Tx) error {
+        return currentEvaluation.CreateInDB(tx)
+      })
       if err != nil {
-        appErr = APIErrors.e601(err)
+        appErr = APIErrors.E601(err)
         return
       }
 			se = currentEvaluation
@@ -179,12 +189,12 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator 
 	}
 }
 
-func ScraperTestComplete(domain string, currentHour time.Time, dbc interface{}) (sec dao.ServerEvaluationComplete, appErrs []APIError) {
+func ScraperTestComplete(domain string, currentHour time.Time, db *sql.DB) (sec dao.ServerEvaluationComplete, appErrs []APIError) {
 
 	sec = dao.ServerEvaluationComplete{}
 	appErrs = make([]APIError, 0)
 
-	se, appErr := MakeEvaluationInDomain(domain, currentHour, scrapers.ScraperSSLabs, dbc)
+	se, appErr := MakeEvaluationInDomain(domain, currentHour, scrapers.ScraperSSLabs, db)
   defaultCode := DefaultAPIError()
 	if !(appErr.Code == defaultCode.Code) {
 		appErrs = append(appErrs, appErr)
@@ -195,11 +205,11 @@ func ScraperTestComplete(domain string, currentHour time.Time, dbc interface{}) 
 	if !se.IsDown {
 		sec.Logo, err = scrapers.ScraperLogo(domain)
 		if err != nil {
-			appErrs = append(appErrs, APIErrors.e701(err))
+			appErrs = append(appErrs, APIErrors.E701(err))
 		}
 		sec.Title, err = scrapers.ScraperTitle(domain)
 		if err != nil {
-			appErrs = append(appErrs, APIErrors.e702(err))
+			appErrs = append(appErrs, APIErrors.E702(err))
 		}
 	}
 
@@ -208,23 +218,23 @@ func ScraperTestComplete(domain string, currentHour time.Time, dbc interface{}) 
 			ip := sec.Servers[i].Address
 			sec.Servers[i].Country, err = scrapers.ScraperCountry(ip)
 			if err != nil {
-				appErrs = append(appErrs, APIErrors.e801(err))
+				appErrs = append(appErrs, APIErrors.E801(err))
 			}
 			sec.Servers[i].Owner, err = scrapers.ScraperOwner(ip)
 			if err != nil {
-				appErrs = append(appErrs, APIErrors.e802(err))
+				appErrs = append(appErrs, APIErrors.E802(err))
 			}
 		}
 		var serversChangedI int
-		serversChangedI, err = se.HaveServersChanged(dbc)
+		serversChangedI, err = se.HaveServersChanged(db)
 		if err != nil {
-			appErrs = append(appErrs, APIErrors.e601(err))
+			appErrs = append(appErrs, APIErrors.E601(err))
 			return
 		}
 		sec.ServersChanged = (serversChangedI == dao.SLStatus.Changed)
-		sec.PreviousSslGrade, err = se.PreviousSSLgrade(dbc)
+		sec.PreviousSslGrade, err = se.PreviousSSLgrade(db)
 		if err != nil {
-			appErrs = append(appErrs, APIErrors.e601(err))
+			appErrs = append(appErrs, APIErrors.E601(err))
       return
 		}
 	}
