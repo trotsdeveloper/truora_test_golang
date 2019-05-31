@@ -108,10 +108,10 @@ func CompareServerEvaluation(se1, se2 ServerEvaluation) bool {
 // DAO..
 type DAO interface {
 	existsInDb(dbc interface{}) (bool, error)
-	selectInDB(dbc interface{}) error
-	createInDB(dbc interface{}) error
-	updateInDB(dbc interface{}) error
-	deleteInDB(dbc interface{}) error
+	SelectInDB(dbc interface{}) error
+	CreateInDB(dbc interface{}) error
+	UpdateInDB(dbc interface{}) error
+	DeleteInDB(dbc interface{}) error
 }
 
 func Exec(dbc interface{}, sqlString string, args ...interface{}) (r sql.Result, err error) {
@@ -188,7 +188,7 @@ func CleanDataInDB(dbc *sql.DB) error {
 	return err
 }
 
-func (s *Server) existsInDB(dbc interface{}) (bool, error) {
+func (s *Server) ExistsInDB(dbc interface{}) (bool, error) {
 	sqlStatement := `SELECT id FROM server WHERE id =$1;`
 	row, err := QueryRow(dbc, sqlStatement, s.Id)
 	err = row.Scan(&s.Id)
@@ -203,7 +203,7 @@ func (s *Server) existsInDB(dbc interface{}) (bool, error) {
 }
 
 //
-func (s *Server) selectInDB(dbc interface{}) error {
+func (s *Server) SelectInDB(dbc interface{}) error {
 	sqlStatement := `SELECT address, sslGrade, country, owner FROM server WHERE id=$1;`
 	row, err := QueryRow(dbc, sqlStatement, s.Id)
 	err = row.Scan(&s.Address, &s.SslGrade, &s.Country, &s.Owner)
@@ -217,7 +217,7 @@ func (s *Server) selectInDB(dbc interface{}) error {
 	}
 }
 
-func (s *Server) createInDB(dbc interface{}) error {
+func (s *Server) CreateInDB(dbc interface{}) error {
 	sqlStatement := `INSERT INTO server (address, sslGrade, country, owner)
 	VALUES ($1, $2, $3, $4) RETURNING id;`
 	row, err := QueryRow(dbc, sqlStatement, s.Address, s.SslGrade, s.Country, s.Owner)
@@ -231,7 +231,7 @@ func (s *Server) updateServerEvaluationInDB(serverEvaluationId int, dbc interfac
 	return err
 }
 
-func (s *Server) updateInDB(dbc interface{}) error {
+func (s *Server) UpdateInDB(dbc interface{}) error {
 	sqlStatement := `UPDATE server SET address = $2, sslGrade = $3, country = $4,
 	owner = $5 WHERE id = $1;`
 	_, err := Exec(dbc, sqlStatement, s.Id, s.Address,
@@ -239,13 +239,13 @@ func (s *Server) updateInDB(dbc interface{}) error {
 	return err
 }
 
-func (s *Server) deleteInDB(dbc interface{}) error {
+func (s *Server) DeleteInDB(dbc interface{}) error {
 	sqlStatement := `DELETE FROM server WHERE id = $1;`
 	_, err := Exec(dbc, sqlStatement, s.Id)
 	return err
 }
 
-func (se *ServerEvaluation) existsInDB(dbc interface{}) (bool, error) {
+func (se *ServerEvaluation) ExistsInDB(dbc interface{}) (bool, error) {
 	sqlStatement := `SELECT id FROM serverEvaluation WHERE id =$1;`
 	row, err := QueryRow(dbc, sqlStatement, se.Id)
 	err = row.Scan(&se.Id)
@@ -259,7 +259,7 @@ func (se *ServerEvaluation) existsInDB(dbc interface{}) (bool, error) {
 	}
 }
 
-func (se *ServerEvaluation) selectInDB(dbc interface{}) error {
+func (se *ServerEvaluation) SelectInDB(dbc interface{}) error {
 	sqlStatement := `SELECT domain, EvaluationHour, EvaluationInProgress, sslGrade, isDown FROM
 	serverEvaluation WHERE id=$1;`
 	row, err := QueryRow(dbc, sqlStatement, se.Id)
@@ -275,7 +275,7 @@ func (se *ServerEvaluation) selectInDB(dbc interface{}) error {
 
 }
 
-func (se *ServerEvaluation) createInDB(dbc interface{}) error {
+func (se *ServerEvaluation) CreateInDB(dbc interface{}) error {
 	sqlStatement := `INSERT INTO serverEvaluation (domain, EvaluationHour, EvaluationInProgress, sslGrade, isDown)
 	VALUES ($1, $2, $3, $4, $5) RETURNING id;`
 	row, err := QueryRow(dbc, sqlStatement, se.Domain, se.EvaluationHour, se.EvaluationInProgress, se.SslGrade, se.IsDown)
@@ -285,7 +285,7 @@ func (se *ServerEvaluation) createInDB(dbc interface{}) error {
 	}
 	if len(se.Servers) > 0 {
 		for _, v := range se.Servers {
-			if err = v.createInDB(dbc); err != nil {
+			if err = v.CreateInDB(dbc); err != nil {
 				return err
 			}
 			if err = v.updateServerEvaluationInDB(se.Id, dbc); err != nil {
@@ -296,7 +296,7 @@ func (se *ServerEvaluation) createInDB(dbc interface{}) error {
 	return err
 }
 
-func (se *ServerEvaluation) updateInDB(dbc interface{}) error {
+func (se *ServerEvaluation) UpdateInDB(dbc interface{}) error {
 	sqlStatement := `UPDATE serverEvaluation SET domain = $2, EvaluationHour = $3, EvaluationInProgress = $4,
 	sslGrade = $5, isDown = $6 WHERE id = $1;`
 	_, err := Exec(dbc, sqlStatement, se.Id, se.Domain,
@@ -310,7 +310,7 @@ func (se *ServerEvaluation) updateInDB(dbc interface{}) error {
 			return err
 		}
 		for _, v := range se.Servers {
-			if err = v.createInDB(dbc); err != nil {
+			if err = v.CreateInDB(dbc); err != nil {
 				return err
 			}
 			if err = v.updateServerEvaluationInDB(se.Id, dbc); err != nil {
@@ -321,7 +321,7 @@ func (se *ServerEvaluation) updateInDB(dbc interface{}) error {
 	return err
 }
 
-func (se *ServerEvaluation) updateHourInDb(dbc interface{}) error {
+func (se *ServerEvaluation) UpdateHourInDb(dbc interface{}) error {
 	sqlStatement := `UPDATE serverEvaluation SET EvaluationHour = $2 WHERE id = $1;`
 	_, err := Exec(dbc, sqlStatement, se.Id, se.EvaluationHour)
 	return err
@@ -333,7 +333,7 @@ func (se *ServerEvaluation) deleteAllServersInDB(dbc interface{}) error {
 	return err
 }
 
-func (se *ServerEvaluation) deleteInDB(dbc interface{}) error {
+func (se *ServerEvaluation) DeleteInDB(dbc interface{}) error {
 	sqlStatement := `DELETE FROM serverEvaluation WHERE id = $1;`
 	_, err := Exec(dbc, sqlStatement, se.Id)
 	if err == nil {
@@ -367,42 +367,49 @@ func ListServerEvaluations(dbc interface{}) ([]ServerEvaluation, error) {
 	return serverEvaluations, err
 }
 
-func ListRecentServerEvaluations(dbc interface{}) (sel []ServerEvaluation, err error) {
-	sel, err = ListServerEvaluations(dbc)
+func ListRecentServerEvaluations(dbc interface{}) ([]ServerEvaluation, error) {
+	sel, err := ListServerEvaluations(dbc)
 	if err != nil {
-		return
+		return nil, err
 	}
-	domains := make(map[string][]ServerEvaluation)
 
+	domains := make(map[string][]ServerEvaluation)
 	for i, _ := range sel {
 		if arr, ok := domains[sel[i].Domain]; ok {
 			arr = append(arr, sel[i])
 			domains[sel[i].Domain] = arr
 		} else {
 			domains[sel[i].Domain] = make([]ServerEvaluation, 0)
+			arr = append(arr, sel[i])
+			domains[sel[i].Domain] = arr
 		}
 	}
 
+	recentEvaluations := make([]ServerEvaluation, 0)
 	for _, selByDomain := range domains {
-		lowestBound := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-		highest := lowestBound
-		highestSE := ServerEvaluation{}
 
-		for _, v := range selByDomain {
-			var d time.Time
-			d, err = time.Parse(time.RFC3339, v.EvaluationHour)
-			if err != nil {
-				return
+		if len(selByDomain) >= 1 {
+			lowestBound := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+			highest := lowestBound
+			highestSE := selByDomain[0]
+
+			for i := 1; i < len(selByDomain); i++ {
+				v := selByDomain[i]
+				var d time.Time
+				d, err = time.Parse(time.RFC3339, v.EvaluationHour)
+				if err != nil {
+					return nil, err
+				}
+				if d.After(highest) {
+					highest = d
+					highestSE = v
+				}
 			}
-			if d.After(highest) {
-				highest = d
-				highestSE = v
-			}
+			recentEvaluations = append(recentEvaluations, highestSE)
 		}
-		sel = append(sel, highestSE)
 
 	}
-	return
+	return recentEvaluations, err
 }
 
 func ListServersID(idServerEvaluation int, dbc interface{}) ([]Server, error) {
@@ -481,7 +488,7 @@ func (se *ServerEvaluation) SearchLastEvaluation(domainName string, EvaluationIn
 	}
 
 	se.Id = highestID
-	se.selectInDB(dbc)
+	se.SelectInDB(dbc)
 	return err
 }
 
@@ -545,100 +552,4 @@ func (se *ServerEvaluation) PreviousSSLgrade(dbc interface{}) (string, error) {
 	}
 
 	return seTmp.SslGrade, nil
-}
-
-func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator func(time.Time, string) (ServerEvaluation, error),
-	dbc interface{}) (se ServerEvaluation, err error) {
-	// 1) In the database, is there a server Evaluation in process
-	// with the same given domain?
-	pendingEvaluation := ServerEvaluation{}
-	err = pendingEvaluation.SearchLastEvaluation(domainName, true, currentHour, dbc)
-	if err != nil {
-		return
-	}
-	if pendingEvaluation.Id != 0 {
-		// 1.1) YES: Is difference between the current hour
-		// and the pending Evaluation lower than 20 seconds?
-		var pendingEvaluationHour time.Time
-		pendingEvaluationHour, err = time.Parse(time.RFC3339, pendingEvaluation.EvaluationHour)
-		if err != nil {
-			return
-		}
-		pendingEvaluationHourA20 := pendingEvaluationHour.Add(time.Second * 20)
-		if pendingEvaluationHourA20.After(currentHour) {
-			// 1.1.1) YES: In the database, data will remain unchanged
-			// return the pending Evaluation
-			se = pendingEvaluation
-			return
-		} else {
-			// 1.1.2) Update the hour of the pending Evaluation with the current hour
-			pendingEvaluation.EvaluationHour = currentHour.Format(time.RFC3339)
-			err = pendingEvaluation.updateHourInDb(dbc)
-			if err != nil {
-				return
-			}
-
-			var currentEvaluation ServerEvaluation
-			currentEvaluation, err = evaluator(currentHour, domainName)
-			if err != nil {
-				return
-			}
-			// 1.1.2) NO: In SSLabs, Is the server Evaluation in process?
-			if currentEvaluation.EvaluationInProgress {
-				// 1.1.2.1) YES: Return the pending Evaluation with the new hour
-				se = pendingEvaluation
-				return
-			} else {
-				// 1.1.2.2) NO: Update the pending Evaluation in the database, with
-				// the information of the current Evaluation
-				currentEvaluation.Id = pendingEvaluation.Id
-				err = currentEvaluation.updateInDB(dbc)
-				se = currentEvaluation
-				return
-			}
-		}
-	} else {
-		// 1.2) NO: Is there a past server Evaluation, ready, with the same given domain?
-		pastEvaluation := ServerEvaluation{}
-		err = pastEvaluation.SearchLastEvaluation(domainName, false, currentHour, dbc)
-		if pastEvaluation.Id != 0 {
-			// 1.2.1) YES: Is difference lower than 20 seconds?
-			var pastEvaluationHour time.Time
-			pastEvaluationHour, err = time.Parse(time.RFC3339, pastEvaluation.EvaluationHour)
-			if err != nil {
-				return
-			}
-			pastEvaluationHourA20 := pastEvaluationHour.Add(time.Second * 20)
-			if pastEvaluationHourA20.After(currentHour) {
-				// 1.2.1.1) YES: In the database, data will remain unchanged,
-				// return the past Evaluation
-				se = pastEvaluation
-				return
-			} else {
-				// 1.2.1.2) NO: Make a server Evaluation from SSLabs, save it in DB.
-				var currentEvaluation ServerEvaluation
-				currentEvaluation, err = evaluator(currentHour, domainName)
-				if err != nil {
-					return
-				}
-				err = currentEvaluation.createInDB(dbc)
-				se = currentEvaluation
-				return
-			}
-		} else {
-			// 1.2.2) NO: Make a server Evaluation from SSLabs, save it in DB.
-
-			var currentEvaluation ServerEvaluation
-			currentEvaluation, err = evaluator(currentHour, domainName)
-			if err != nil {
-				fmt.Println("MISTAKE HERE")
-				fmt.Println(fmt.Sprintf("No sense: %v", currentHour.Format(time.RFC3339)))
-				fmt.Println(fmt.Sprintf("HEY: %v", currentEvaluation))
-				return
-			}
-			err = currentEvaluation.createInDB(dbc)
-			se = currentEvaluation
-			return
-		}
-	}
 }

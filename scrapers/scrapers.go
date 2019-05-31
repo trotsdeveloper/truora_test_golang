@@ -148,14 +148,12 @@ func ScraperTitle(domain string) (s string, err error) {
 func ScraperSSLabs(currentHour time.Time, domain string) (se dao.ServerEvaluation, err error) {
 	byt, err := getHTMLinDomain(fmt.Sprintf("https://api.ssllabs.com/api/v3/analyze?host=%v/", domain))
 	if err != nil {
-		fmt.Println(fmt.Sprintf("err: %v", err))
 		return
 	}
 
 	var dat map[string]interface{}
 	err = json.Unmarshal(byt, &dat)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("err: %v", err))
 		return
 	}
 
@@ -163,7 +161,6 @@ func ScraperSSLabs(currentHour time.Time, domain string) (se dao.ServerEvaluatio
 	status, ok := dat["status"]
 	if !ok {
 		err = errors.New("status TAG not present")
-		fmt.Println(fmt.Sprintf("err: %v", err))
 		return
 	}
 
@@ -182,10 +179,12 @@ func ScraperSSLabs(currentHour time.Time, domain string) (se dao.ServerEvaluatio
 		endpoints, ok := dat["endpoints"].([]interface{})
 		if !ok {
 			err = errors.New("endpoints TAG not present")
+			se.Servers = servers
 			return
 		}
 		califications := make(map[string]int)
 		// A+, A-, A-F, T (no trust) and M
+		califications["NaN"] = -1
 		califications["M"] = 0
 		califications["T"] = 1
 		califications["F"] = 2
@@ -203,122 +202,31 @@ func ScraperSSLabs(currentHour time.Time, domain string) (se dao.ServerEvaluatio
 		for _, v := range endpoints {
 			castV := v.(map[string]interface{})
 			server := dao.Server{}
-			ip := castV["ipAddress"].(string)
-			grade := castV["grade"].(string)
-			server.Address = ip
-			server.SslGrade = grade
-			servers = append(servers, server)
-			if califications[grade] < lowest {
-				lowest = califications[grade]
-				lowestGrade = grade
+			var ipI, gradeI interface{}
+			var ok bool
+			ipI, ok = castV["ipAddress"]
+			if ok {
+				server.Address = ipI.(string)
+				gradeI, ok = castV["grade"]
+				if ok {
+					grade := gradeI.(string)
+					server.SslGrade = grade
+					servers = append(servers, server)
+					if califications[grade] < lowest {
+						lowest = califications[grade]
+						lowestGrade = grade
+					}
+				} else {
+					servers = append(servers, server)
+					lowest = califications["NaN"]
+					lowestGrade = "NaN"
+				}
 			}
 		}
+		se.Servers = servers
 		se.SslGrade = lowestGrade
 	}
 
-	se.Servers = servers
-	return
-}
-
-var APIErrors = newAPIErrorsRegistry()
-
-func newAPIErrorsRegistry() *apiErrorsRegistry {
-	e601v := makeAPIError("601", "Error in database.")
-	e602v := makeAPIError("602", "Error in SSLabs API.")
-	e701v := makeAPIError("701", "Error getting Icon")
-	e702v := makeAPIError("702", "Error getting HTML Title")
-	e801v := makeAPIError("801", "Error getting country from WHOIS")
-	e802v := makeAPIError("802", "Error getting owner from WHOIS")
-
-	return &apiErrorsRegistry{
-		e601: e601v,
-		e602: e602v,
-		e701: e701v,
-		e702: e702v,
-		e801: e801v,
-		e802: e802v,
-	}
-}
-
-func makeAPIError(code string, description string) func(string) (APIError) {
-	return func(err string) (APIError) {
-		return APIError{code, description, err}
-	}
-}
-
-type apiErrorsRegistry struct {
-	e601 func(string) (APIError) //
-	e602 func(string) (APIError) //
-	e701 func(string) (APIError) //
-	e702 func(string) (APIError) //
-	e801 func(string) (APIError) //
-	e802 func(string) (APIError) //
-}
-
-type APIError struct {
-	code string
-	description string
-	err string
-}
-
-/*
-e601v := makeAPIError("601", "Error in database.")
-e602v := makeAPIError("602", "Error in SSLabs API.")
-e701v := makeAPIError("701", "Error getting Icon")
-e702v := makeAPIError("702", "Error getting HTML Title")
-e801v := makeAPIError("801", "Error getting country from WHOIS")
-e802v := makeAPIError("802", "Error getting owner from WHOIS")
-*/
-func ScraperTestComplete(domain string, currentHour time.Time, dbc interface{}) (sec dao.ServerEvaluationComplete, appErr []APIError) {
-
-	sec = dao.ServerEvaluationComplete{}
-	appErr := make([]APIError, 0)
-
-	var se dao.ServerEvaluation
-	var err error
-	se, err = dao.MakeEvaluationInDomain(domain, currentHour, ScraperSSLabs, dbc)
-
-	if err != nil {
-		appErr = append(appErr, APIErrors.e601(err))	
-		return
-	}
-
-	sec.Copy(se)
-	if !se.IsDown {
-		sec.Logo, err = ScraperLogo(domain)
-		if err != nil {
-			appErr = append(appErr, APIErrors.e701(err))
-		}
-		sec.Title, err = ScraperTitle(domain)
-		if err != nil {
-			appErr = append(appErr, APIErrors.e702(err))
-		}
-	}
-
-	if !se.EvaluationInProgress && !se.IsDown {
-		for i := range sec.Servers {
-			ip := sec.Servers[i].Address
-			sec.Servers[i].Country, err = ScraperCountry(ip)
-			if err != nil {
-				appErr = append(appErr, APIErrors.e801)
-			}
-			sec.Servers[i].Owner, err = ScraperOwner(ip)
-			if err != nil {
-				appErr = append(appErr, APIErrors.e802)
-			}
-		}
-		var serversChangedI int
-		serversChangedI, err = se.HaveServersChanged(dbc)
-		if err != nil {
-			fmt.Println(fmt.Sprintf("err: %v", err))
-			return
-		}
-		sec.ServersChanged = (serversChangedI == dao.SLStatus.Changed)
-		sec.PreviousSslGrade, err = se.PreviousSSLgrade(dbc)
-		if err != nil {
-			fmt.Println(fmt.Sprintf("err: %v", err))
-		}
-	}
 
 	return
 }
