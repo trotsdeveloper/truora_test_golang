@@ -12,9 +12,13 @@ import (
 	"golang.org/x/net/html"
 )
 
+const (
+	WHOISXMLAPI_KEY = "at_7UiqEmpdxBJmZ9rQxIlkzACwNDiXA"
+)
+
 
 func ScraperCountry(ip string) (country string, err error) {
-	url := "https://geoipify.whoisxmlapi.com/api/v1?apiKey=at_7UiqEmpdxBJmZ9rQxIlkzACwNDiXA&ipAddress="+ip+"&outputFormat=json"
+	url := "https://geoipify.whoisxmlapi.com/api/v1?apiKey="+WHOISXMLAPI_KEY+"&ipAddress="+ip+"&outputFormat=json"
 	var apiInfo map[string]interface{}
 
 	r, err := http.Get(url)
@@ -28,7 +32,7 @@ func ScraperCountry(ip string) (country string, err error) {
 
 	location, ok := apiInfo["location"]
 	if !ok {
-		err = errors.New("Error loading data in GEOIPIFY")
+		err = errors.New("Error getting country from IP "+ip+" in GEOIPIFY API")
 		return
 	}
 	var v map[string]interface{}
@@ -38,7 +42,7 @@ func ScraperCountry(ip string) (country string, err error) {
 }
 
 func ScraperOwner(ip string) (owner string, err error) {
-	url := "https://www.whoisxmlapi.com/whoisserver/WhoisService?apiKey=at_5UhpXqA9prtTSlHrPE2UJiUyASacC&domainName="+ip+"&outputFormat=json"
+	url := "https://www.whoisxmlapi.com/whoisserver/WhoisService?apiKey="+WHOISXMLAPI_KEY+"&domainName="+ip+"&outputFormat=json"
 	var apiInfo map[string]interface{}
 
 	r, err := http.Get(url)
@@ -51,7 +55,8 @@ func ScraperOwner(ip string) (owner string, err error) {
 	}
 	whoisRecord, ok := apiInfo["WhoisRecord"]
 	if !ok {
-		err = errors.New("Error loading data in WHOISXMLAPI")
+		fmt.Println()
+		err = errors.New("Error getting owner from IP "+ip+" in WHOISXML API")
 		return
 	}
 	var v map[string]interface{}
@@ -144,7 +149,6 @@ func ScraperTitle(domain string) (s string, err error) {
 		}
 		return title
 	}
-	fmt.Println(fmt.Sprintf("doc: %v", doc))
 	return f(doc), nil
 }
 
@@ -229,7 +233,6 @@ func ScraperSSLabs(currentHour time.Time, domain string) (se dao.ServerEvaluatio
 		}
 		se.SslGrade = lowestGrade
 	}
-	fmt.Println(fmt.Sprintf("What:%v",servers))
 	se.Servers = servers
 
 

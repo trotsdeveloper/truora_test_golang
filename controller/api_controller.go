@@ -208,6 +208,8 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator 
 
 func ScraperTestComplete(domain string, currentHour time.Time, db *sql.DB) (sec dao.ServerEvaluationComplete, appErrs []APIError) {
 	sec = dao.ServerEvaluationComplete{}
+  sec.Servers = make([]dao.Server, 0)
+
 	appErrs = make([]APIError, 0)
 
 	se, changed, appErr := MakeEvaluationInDomain(domain, currentHour, scrapers.ScraperSSLabs, db)
