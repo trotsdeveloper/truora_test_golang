@@ -32,12 +32,10 @@ func EvaluateServerEndPoint(w http.ResponseWriter, r *http.Request) {
 }
 
 func ViewPastEvaluationsEndPoint(w http.ResponseWriter, r *http.Request) {
-	sel, err := dao.ListRecentServerEvaluations(dao.DBConf)
-	apiErrs := make([]controller.APIError,0)
-	if err != nil {
-		apiErrs = append(apiErrs, controller.APIErrors.E601(err))
-	}
-	response := PastEvaluationsResponse{Evaluations: sel, APIErrors:apiErrs}
+
+	currentHour := time.Now()
+	apiErrs := controller.ListRecentEvaluations(currentHour, dao.DBConf)
+	response := PastEvaluationsResponse{Evaluations: controller.RecentEvaluations, APIErrors:apiErrs}
 	respB, _ := json.Marshal(response)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8") // normal header
 	w.WriteHeader(http.StatusOK)

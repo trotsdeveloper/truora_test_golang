@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net/http"
-
 	"github.com/go-chi/chi"
 	"github.com/trotsdeveloper/truora_test/truora_test_golang/dao"
 	"github.com/trotsdeveloper/truora_test/truora_test_golang/rest"

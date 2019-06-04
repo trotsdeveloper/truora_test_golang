@@ -25,7 +25,6 @@ func ScraperCountry(ip string) (country string, err error) {
 	if err = json.NewDecoder(r.Body).Decode(&apiInfo); err != nil {
 		return
 	}
-	fmt.Println(apiInfo)
 
 	location, ok := apiInfo["location"]
 	if !ok {
@@ -127,10 +126,13 @@ func ScraperTitle(domain string) (s string, err error) {
 
 	var doc *html.Node
 	doc, err = html.Parse(strings.NewReader(htmlS))
+	if err != nil {
+		return
+	}
 
 	var f func(*html.Node) string
 	f = func(n *html.Node) string {
-		var title string
+		title := ""
 		if n.Type == html.ElementNode && n.Data == "title" {
 			return n.FirstChild.Data
 		}
@@ -142,6 +144,7 @@ func ScraperTitle(domain string) (s string, err error) {
 		}
 		return title
 	}
+	fmt.Println(fmt.Sprintf("doc: %v", doc))
 	return f(doc), nil
 }
 
@@ -175,6 +178,7 @@ func ScraperSSLabs(currentHour time.Time, domain string) (se dao.ServerEvaluatio
 	}
 
 	servers := make([]dao.Server, 0)
+
 	if !se.EvaluationInProgress && !se.IsDown {
 		endpoints, ok := dat["endpoints"].([]interface{})
 		if !ok {
@@ -223,9 +227,10 @@ func ScraperSSLabs(currentHour time.Time, domain string) (se dao.ServerEvaluatio
 				}
 			}
 		}
-		se.Servers = servers
 		se.SslGrade = lowestGrade
 	}
+	fmt.Println(fmt.Sprintf("What:%v",servers))
+	se.Servers = servers
 
 
 	return

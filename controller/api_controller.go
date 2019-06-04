@@ -9,6 +9,13 @@ import (
   "context"
 )
 
+var DomainEvaluationTW time.Duration = time.Second * 20
+
+var RecentEvaluationsTW time.Duration = time.Second * 20
+var RecentEvaluationsLQ time.Time
+
+var RecentEvaluations = make([]dao.ServerEvaluation, 0)
+
 var APIErrors = newAPIErrorsRegistry()
 
 func newAPIErrorsRegistry() *apiErrorsRegistry {
@@ -64,11 +71,13 @@ func (x *APIError) IsInArray(a []APIError) bool {
   return false
 }
 
-func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator func(time.Time, string) (dao.ServerEvaluation, error),
-	db *sql.DB) (se dao.ServerEvaluation, appErr APIError) {
+func MakeEvaluationInDomainTW(waitTime time.Duration, domainName string, currentHour time.Time,
+  evaluator func(time.Time, string) (dao.ServerEvaluation, error), db *sql.DB) (se dao.ServerEvaluation, changed bool, appErr APIError) {
 	// 1) In the database, is there a server Evaluation in process
 	// with the same given domain?
+  changed = false
   appErr = DefaultAPIError()
+
   var err error
 	pendingEvaluation := dao.ServerEvaluation{}
 
@@ -86,14 +95,14 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator 
       appErr = APIErrors.E601(err)
 			return
 		}
-		pendingEvaluationHourA20 := pendingEvaluationHour.Add(time.Second * 20)
+		pendingEvaluationHourA20 := pendingEvaluationHour.Add(waitTime)
 		if pendingEvaluationHourA20.After(currentHour) {
 			// 1.1.1) YES: In the database, data will remain unchanged
 			// return the pending Evaluation
 			se = pendingEvaluation
 			return
 		} else {
-			// 1.1.2) Update the hour of the pending Evaluation with the current hour
+			// 1.1.2) NO: Update the hour of the pending Evaluation with the current hour
 			pendingEvaluation.EvaluationHour = currentHour.Format(time.RFC3339)
 			err = pendingEvaluation.UpdateHourInDb(db)
 			if err != nil {
@@ -107,7 +116,7 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator 
         appErr = APIErrors.E602(err)
 				return
 			}
-			// 1.1.2) NO: In SSLabs, Is the server Evaluation in process?
+			// 1.1.2) In SSLabs, Is the server Evaluation in process?
 			if currentEvaluation.EvaluationInProgress {
 				// 1.1.2.1) YES: Return the pending Evaluation with the new hour
 				se = pendingEvaluation
@@ -124,6 +133,7 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator 
           return
         }
 				se = currentEvaluation
+        changed = true
 				return
 			}
 		}
@@ -143,7 +153,7 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator 
         appErr = APIErrors.E601(err)
 				return
 			}
-			pastEvaluationHourA20 := pastEvaluationHour.Add(time.Second * 20)
+			pastEvaluationHourA20 := pastEvaluationHour.Add(waitTime)
 			if pastEvaluationHourA20.After(currentHour) {
 				// 1.2.1.1) YES: In the database, data will remain unchanged,
 				// return the past Evaluation
@@ -165,6 +175,7 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator 
           return
         }
 				se = currentEvaluation
+        changed = true
 				return
 			}
 		} else {
@@ -184,17 +195,22 @@ func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator 
         return
       }
 			se = currentEvaluation
+      changed = true
 			return
 		}
 	}
 }
 
-func ScraperTestComplete(domain string, currentHour time.Time, db *sql.DB) (sec dao.ServerEvaluationComplete, appErrs []APIError) {
+func MakeEvaluationInDomain(domainName string, currentHour time.Time, evaluator func(time.Time, string) (dao.ServerEvaluation, error),
+	db *sql.DB) (se dao.ServerEvaluation, changed bool, appErr APIError) {
+    return MakeEvaluationInDomainTW(DomainEvaluationTW, domainName, currentHour, evaluator, db)
+}
 
+func ScraperTestComplete(domain string, currentHour time.Time, db *sql.DB) (sec dao.ServerEvaluationComplete, appErrs []APIError) {
 	sec = dao.ServerEvaluationComplete{}
 	appErrs = make([]APIError, 0)
 
-	se, appErr := MakeEvaluationInDomain(domain, currentHour, scrapers.ScraperSSLabs, db)
+	se, changed, appErr := MakeEvaluationInDomain(domain, currentHour, scrapers.ScraperSSLabs, db)
   defaultCode := DefaultAPIError()
 	if !(appErr.Code == defaultCode.Code) {
 		appErrs = append(appErrs, appErr)
@@ -202,42 +218,85 @@ func ScraperTestComplete(domain string, currentHour time.Time, db *sql.DB) (sec 
   var err error
 	sec.Copy(se)
 
-	if !se.IsDown {
-		sec.Logo, err = scrapers.ScraperLogo(domain)
-		if err != nil {
-			appErrs = append(appErrs, APIErrors.E701(err))
-		}
-		sec.Title, err = scrapers.ScraperTitle(domain)
-		if err != nil {
-			appErrs = append(appErrs, APIErrors.E702(err))
-		}
-	}
+  if changed {
+    if !se.IsDown {
+      sec.Logo, err = scrapers.ScraperLogo(domain)
+      if err != nil {
+        appErrs = append(appErrs, APIErrors.E701(err))
+      }
+      err = se.UpdateLogoInDb(db)
+      if err != nil {
+        appErrs = append(appErrs, APIErrors.E601(err))
+      }
 
-	if !se.EvaluationInProgress && !se.IsDown {
-		for i := range sec.Servers {
-			ip := sec.Servers[i].Address
-			sec.Servers[i].Country, err = scrapers.ScraperCountry(ip)
-			if err != nil {
-				appErrs = append(appErrs, APIErrors.E801(err))
-			}
-			sec.Servers[i].Owner, err = scrapers.ScraperOwner(ip)
-			if err != nil {
-				appErrs = append(appErrs, APIErrors.E802(err))
-			}
-		}
-		var serversChangedI int
-		serversChangedI, err = se.HaveServersChanged(db)
-		if err != nil {
-			appErrs = append(appErrs, APIErrors.E601(err))
-			return
-		}
-		sec.ServersChanged = (serversChangedI == dao.SLStatus.Changed)
-		sec.PreviousSslGrade, err = se.PreviousSSLgrade(db)
-		if err != nil {
-			appErrs = append(appErrs, APIErrors.E601(err))
-      return
-		}
-	}
+      sec.Title, err = scrapers.ScraperTitle(domain)
+      if err != nil {
+        appErrs = append(appErrs, APIErrors.E702(err))
+      }
+      err = se.UpdateTitleInDb(db)
+      if err != nil {
+        appErrs = append(appErrs, APIErrors.E601(err))
+      }
+    }
+    if !se.EvaluationInProgress && !se.IsDown {
+      for i := range sec.Servers {
+        ip := sec.Servers[i].Address
+        sec.Servers[i].Country, err = scrapers.ScraperCountry(ip)
+        if err != nil {
+          appErrs = append(appErrs, APIErrors.E801(err))
+        }
+        sec.Servers[i].Owner, err = scrapers.ScraperOwner(ip)
+        if err != nil {
+          appErrs = append(appErrs, APIErrors.E802(err))
+        }
+        err = sec.Servers[i].UpdateInDB(db)
+        if err != nil {
+    			appErrs = append(appErrs, APIErrors.E601(err))
+    			return
+    		}
+      }
+      var serversChangedI int
+      serversChangedI, err = se.HaveServersChanged(db)
+      if err != nil {
+        appErrs = append(appErrs, APIErrors.E601(err))
+        return
+      }
+      sec.ServersChanged = (serversChangedI == dao.SLStatus.Changed)
+      sec.PreviousSslGrade, err = se.PreviousSSLgrade(db)
+      if err != nil {
+        appErrs = append(appErrs, APIErrors.E601(err))
+        return
+      }
+    }
+  }
 
 	return
+}
+
+func ListRecentEvaluations(currentHour time.Time, db *sql.DB) (apiErrs []APIError) {
+
+  if len(RecentEvaluations) == 0 {
+    var err error
+    RecentEvaluations, err = dao.ListRecentServerEvaluations(dao.DBConf)
+  	apiErrs = make([]APIError,0)
+  	if err != nil {
+  		apiErrs = append(apiErrs, APIErrors.E601(err))
+  	}
+    RecentEvaluationsLQ = currentHour
+    return
+  }
+
+  if RecentEvaluationsLQ.Add(RecentEvaluationsTW).Before(currentHour) {
+    var err error
+    RecentEvaluations, err = dao.ListRecentServerEvaluations(dao.DBConf)
+  	apiErrs = make([]APIError,0)
+  	if err != nil {
+  		apiErrs = append(apiErrs, APIErrors.E601(err))
+  	}
+    RecentEvaluationsLQ = currentHour
+    return
+  }
+
+  apiErrs = make([]APIError, 0)
+  return
 }
