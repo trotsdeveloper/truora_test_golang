@@ -1,3 +1,5 @@
+// Package for the declaration of the REST API
+// The package contains the response structures and endpoints of the rest apis
 package rest
 
 import (
@@ -9,18 +11,19 @@ import (
 	"github.com/trotsdeveloper/truora_test/truora_test_golang/controller"
 )
 
+// Structure representing a response in the EvaluateDomainEndpoint
 type EvaluationResponse struct {
-	Evaluation dao.ServerEvaluationComplete `json:"evaluation"`
+	Evaluation dao.DomainEvaluationComplete `json:"evaluation"`
 	APIErrors []controller.APIError	`json:"errors"`
 }
 
+// Structure representing a response in the ViewPastEvaluationsEndPoint
 type PastEvaluationsResponse struct {
-	Evaluations []dao.ServerEvaluation `json:"evaluations"`
+	Evaluations []dao.DomainEvaluation `json:"evaluations"`
 	APIErrors []controller.APIError `json:"errors"`
 }
 
-
-func EvaluateServerEndPoint(w http.ResponseWriter, r *http.Request) {
+func EvaluateDomainEndPoint(w http.ResponseWriter, r *http.Request) {
 	domain := chi.URLParam(r, "domainName")
 	currentHour := time.Now()
 	sec, apiErrs := controller.ScraperTestComplete(domain, currentHour, dao.DBConf)
