@@ -131,6 +131,7 @@ func (x *APIError) IsInArray(a []APIError) bool {
 func EvaluateDomainTW(waitTime time.Duration, domainName string, currentHour time.Time,
   evaluator func(time.Time, string) (dao.DomainEvaluation, error), db *sql.DB) (de dao.DomainEvaluation, changed bool, appErr APIError) {
 
+  de.Servers = make([]dao.Server, 0)
   // 1) In the database, is there a Domain Evaluation in process
 	// with the same given domain?
   changed = false
