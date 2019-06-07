@@ -15,8 +15,8 @@ func main() {
 		fmt.Println("Error initing DB")
 	} else {
 		r := chi.NewRouter()
-		r.Route("/serverEvaluations", func(r chi.Router) {
-			r.Get("/{domainName}", rest.EvaluateServerEndPoint)
+		r.Route("/domainEvaluations", func(r chi.Router) {
+			r.Get("/{domainName}", rest.EvaluateDomainEndPoint)
 			r.Get("/", rest.ViewPastEvaluationsEndPoint)
 		})
 		http.ListenAndServe(":3000", r)

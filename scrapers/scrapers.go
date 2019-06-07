@@ -1,3 +1,5 @@
+// Package for the declaration of scrapers for extracting information about
+// a specific domain
 package scrapers
 
 import (
@@ -12,11 +14,14 @@ import (
 	"golang.org/x/net/html"
 )
 
+// Scraper constants.
 const (
 	WHOISXMLAPI_KEY = "at_7UiqEmpdxBJmZ9rQxIlkzACwNDiXA"
 )
 
-
+// Function for getting the country from a specific ip.
+// The function connects to the WHOISXMLAPI Geopify App in order to extract
+// the information
 func ScraperCountry(ip string) (country string, err error) {
 	url := "https://geoipify.whoisxmlapi.com/api/v1?apiKey="+WHOISXMLAPI_KEY+"&ipAddress="+ip+"&outputFormat=json"
 	var apiInfo map[string]interface{}
@@ -41,6 +46,9 @@ func ScraperCountry(ip string) (country string, err error) {
 	return
 }
 
+// Function for getting the owner from a specific ip.
+// The function connects to the WHOISXMLAPI WhoisService App in order
+// to extract the information.
 func ScraperOwner(ip string) (owner string, err error) {
 	url := "https://www.whoisxmlapi.com/whoisserver/WhoisService?apiKey="+WHOISXMLAPI_KEY+"&domainName="+ip+"&outputFormat=json"
 	var apiInfo map[string]interface{}
@@ -69,6 +77,8 @@ func ScraperOwner(ip string) (owner string, err error) {
 	return
 }
 
+// Function for getting the html of a specific domain.
+// The function is used to avoid code repetition.
 func getHTMLinDomain(domain string) (htmlB []byte, err error) {
 	var resp *http.Response
 	resp, err = http.Get(domain)
@@ -80,6 +90,9 @@ func getHTMLinDomain(domain string) (htmlB []byte, err error) {
 	return
 }
 
+// Function for getting the logo given a specific domain name.
+// The scraper use the tokenizer library for navigating into the html of
+// the given domain
 func ScraperLogo(domain string) (logo string, err error) {
 	var htmlB []byte
 	htmlB, err = getHTMLinDomain(fmt.Sprintf("http://%v/", domain))
@@ -121,6 +134,9 @@ func ScraperLogo(domain string) (logo string, err error) {
 	return f(doc), nil
 }
 
+// Function for getting the title given a specific domain name.
+// The scraper use the tokenizer library for navigating into the html
+// of the domain with the given name.
 func ScraperTitle(domain string) (s string, err error) {
 	var htmlB []byte
 	htmlB, err = getHTMLinDomain(fmt.Sprintf("http://%v/", domain))
@@ -152,7 +168,11 @@ func ScraperTitle(domain string) (s string, err error) {
 	return f(doc), nil
 }
 
-func ScraperSSLabs(currentHour time.Time, domain string) (se dao.ServerEvaluation, err error) {
+// Main scraper.
+// Given a time representing in the current hour and a domain name. The scraper
+// extract the info from SSLabs and store it into a DomainEvaluation structure.
+
+func ScraperSSLabs(currentHour time.Time, domain string) (de dao.DomainEvaluation, err error) {
 	byt, err := getHTMLinDomain(fmt.Sprintf("https://api.ssllabs.com/api/v3/analyze?host=%v/", domain))
 	if err != nil {
 		return
@@ -172,22 +192,22 @@ func ScraperSSLabs(currentHour time.Time, domain string) (se dao.ServerEvaluatio
 	}
 
 	// Assignation in server evaluation
-	se.Domain = domain
-	se.EvaluationHour = currentHour.Format(time.RFC3339)
+	de.Domain = domain
+	de.EvaluationHour = currentHour.Format(time.RFC3339)
 
 	if status == "DNS" || status == "IN_PROGRESS" {
-		se.EvaluationInProgress = true
+		de.EvaluationInProgress = true
 	} else if status == "ERROR" {
-		se.IsDown = true
+		de.IsDown = true
 	}
 
 	servers := make([]dao.Server, 0)
 
-	if !se.EvaluationInProgress && !se.IsDown {
+	if !de.EvaluationInProgress && !de.IsDown {
 		endpoints, ok := dat["endpoints"].([]interface{})
 		if !ok {
 			err = errors.New("endpoints TAG not present")
-			se.Servers = servers
+			de.Servers = servers
 			return
 		}
 		califications := make(map[string]int)
@@ -231,9 +251,9 @@ func ScraperSSLabs(currentHour time.Time, domain string) (se dao.ServerEvaluatio
 				}
 			}
 		}
-		se.SslGrade = lowestGrade
+		de.SslGrade = lowestGrade
 	}
-	se.Servers = servers
+	de.Servers = servers
 
 
 	return
