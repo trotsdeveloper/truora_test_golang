@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=0">
+  <meta charset="utf-8"/>
+  <title>Truora Test</title>
+
+  <link rel="stylesheet" type="text/css" href="assets/css/bootstrap.min.css">
+  <link rel="stylesheet" type="text/css" href="assets/css/style.css">
+  <link rel="stylesheet" type="text/css" href="assets/css/dataTables.bootstrap.min.css">
+  <link rel="stylesheet" type="text/css" href="assets/css/font-awesome.min.css">
+</head>
+
+<body>
+
+  <nav class="navbar navbar-default navbar-fixed-top">
+            <div class="container">
+
+                <!-- Navbar Header [collects both toggle button and navbar brand] -->
+                <div class="navbar-header">
+                    <!-- Toggle Button [handles opening navbar menu on mobile screens]-->
+                    <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#exampleNavComponents" aria-expanded="false">
+                        <i class="glyphicon glyphicon-align-center"></i>
+                    </button>
+
+                    <!-- Navbar Brand -->
+                    <a href="#" class="navbar-brand">
+                        Truora Test
+                    </a>
+                </div>
+
+
+                <!-- Navbar Collapse [collect navbar components such as navbar links and forms ] -->
+                <div class="collapse navbar-collapse" id="exampleNavComponents">
+
+                    <!-- Navbar Links -->
+                    <ul class="nav navbar-nav navbar-right">
+                        <li><a href="evaluate_domain.html">Evaluate Domain</a></li>
+                        <li><a href="last_domain_evaluations.html">Last Domain Evaluations</a></li>
+                        <li><a href="index.html">About</a></li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+
+  <div class="content">
+
+  <div class="container" id="app">
+    <div class="row">
+      <button v-on:click="find_table" class="btn btn-primary pull-right">Get Last Evaluations (grouped by Domain)</button>
+    </div>
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card-box">
+          <div v-if="just_created">
+          <div class="table-responsive">
+            <table class="table table-striped datatable">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Description</th>
+                  <th>Err</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(error, i) in domainEvaluations.errors" v-bind:key="i">
+                  <td> {{error.code} </td>
+                  <td> {{error.description}} </td>
+                  <td> {{error.error_message}} </td>
+                </tr>
+              </tbody>
+            </table>
+            <table class="table table-striped datatable">
+              <thead>
+                <tr>
+                  <th>Domain</th>
+                  <th>Hour</th>
+                  <th>In progress?</th>
+                  <th>SSL Grade</th>
+                  <th>Logo</th>
+                  <th>Title</th>
+                  <th>Is down?</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(domainEvaluation, i) in domainEvaluations.evaluations" v-bind:key="i">
+                  <td> {{domainEvaluation.domain}} </td>
+                  <td> {{domainEvaluation.hour}} </td>
+                  <td> {{domainEvaluation.in_progress}} </td>
+                  <td> {{domainEvaluation.ssl_grade}}</td>
+                  <td> {{domainEvaluation.logo}} </td>
+                  <td> {{domainEvaluation.title}} </td>
+                  <td> {{domainEvaluation.is_down}} </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.6.10/dist/vue.js"></script>
+  <script type="text/javascript" src="assets/js/jquery-3.2.1.min.js"></script>
+  <script type="text/javascript" src="assets/js/bootstrap.min.js"></script>
+  <script type="text/javascript" src="assets/js/jquery.dataTables.min.js"></script>
+  <script type="text/javascript" src="assets/js/dataTables.bootstrap.min.js"></script>
+  <script type="text/javascript" src="assets/js/jquery.slimscroll.js"></script>
+  <script type="text/javascript" src="assets/js/app.js"></script>
+  <script type="text/javascript" src="js/last_domain_evaluations.js"></script>
+
+</body>
+</html>

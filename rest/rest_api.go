@@ -29,6 +29,8 @@ func EvaluateDomainEndPoint(w http.ResponseWriter, r *http.Request) {
 	sec, apiErrs := controller.ScraperTestComplete(domain, currentHour, dao.DBConf)
 	response := EvaluationResponse{Evaluation:sec, APIErrors:apiErrs}
 	respB, _ := json.Marshal(response)
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json; charset=utf-8") // normal header
 	w.WriteHeader(http.StatusOK)
 	w.Write(respB[:])
@@ -40,6 +42,8 @@ func ViewPastEvaluationsEndPoint(w http.ResponseWriter, r *http.Request) {
 	apiErrs := controller.ListRecentEvaluations(currentHour, dao.DBConf)
 	response := PastEvaluationsResponse{Evaluations: controller.RecentEvaluations, APIErrors:apiErrs}
 	respB, _ := json.Marshal(response)
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json; charset=utf-8") // normal header
 	w.WriteHeader(http.StatusOK)
 	w.Write(respB[:])

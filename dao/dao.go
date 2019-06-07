@@ -73,6 +73,7 @@ type DomainEvaluation struct {
 // about a specific domain using different scrapers and db queries.
 // It's used for displaying information in the API
 type DomainEvaluationComplete struct {
+	EvaluationInProgress		   bool     `json:"evaluation_in_progress"`
 	Servers          []Server `json:"servers"`
 	ServersChanged   bool     `json:"servers_changed"`
 	SslGrade         string   `json:"ssl_grade"` // VARCHAR [5]
@@ -85,6 +86,7 @@ type DomainEvaluationComplete struct {
 // Function self-explanatory, it allows to copy information from one structure
 // for database manipulation to another structure for data visualization
 func (dec *DomainEvaluationComplete) Copy(de DomainEvaluation) {
+	dec.EvaluationInProgress = de.EvaluationInProgress
 	dec.Servers = de.Servers
 	dec.SslGrade = de.SslGrade
 	dec.IsDown = de.IsDown

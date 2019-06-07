@@ -304,6 +304,7 @@ func ScraperTestComplete(domain string, currentHour time.Time, db *sql.DB) (dec 
       if err != nil {
         appErrs = append(appErrs, APIErrors.E701(err))
       }
+      de.Logo = dec.Logo
       err = de.UpdateLogoInDb(db)
       if err != nil {
         appErrs = append(appErrs, APIErrors.E601(err))
@@ -313,6 +314,7 @@ func ScraperTestComplete(domain string, currentHour time.Time, db *sql.DB) (dec 
       if err != nil {
         appErrs = append(appErrs, APIErrors.E702(err))
       }
+      de.Logo = dec.Title
       err = de.UpdateTitleInDb(db)
       if err != nil {
         appErrs = append(appErrs, APIErrors.E601(err))
