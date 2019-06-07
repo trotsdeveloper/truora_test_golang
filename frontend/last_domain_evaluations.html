@@ -48,12 +48,11 @@
 
   <div class="container" id="app">
     <div class="row">
-      <button v-on:click="find_table" class="btn btn-primary pull-right">Get Last Evaluations (grouped by Domain)</button>
+      <button v-on:click="loadTable" class="btn btn-primary pull-right">Get Last Evaluations (grouped by Domain)</button>
     </div>
     <div class="row">
       <div class="col-md-12">
         <div class="card-box">
-          <div v-if="just_created">
           <div class="table-responsive">
             <table class="table table-striped datatable">
               <thead>
@@ -96,7 +95,6 @@
               </tbody>
             </table>
           </div>
-        </div>
         </div>
       </div>
     </div>
